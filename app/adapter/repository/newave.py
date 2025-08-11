@@ -37,6 +37,7 @@ from app.utils.constants import (
     RAW_DECK_FILE,
     STATUS_DIAGNOSIS_FILE,
     SYNTHESIS_DIR,
+    NEWAVE_MAX_TASKS_PER_NODE
 )
 from app.utils.fs import (
     change_file_permission,
@@ -330,7 +331,10 @@ class NEWAVE(AbstractModel):
     ):
         self._log.info(f"Job script file: {self.NEWAVE_JOB_PATH}")
         environ["PATH"] += ":" + ":".join([mpich_path, slurm_path])
-        job_id = submit_job(queue, core_count, self.NEWAVE_JOB_PATH)
+        job_id = submit_job(queue,
+                            core_count,
+                            self.NEWAVE_JOB_PATH,
+                            max_tasks_per_node=NEWAVE_MAX_TASKS_PER_NODE)
         if job_id:
             follow_submitted_job(job_id, self.NEWAVE_JOB_TIMEOUT)
 

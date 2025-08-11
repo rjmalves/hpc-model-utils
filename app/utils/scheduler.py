@@ -5,16 +5,17 @@ from app.utils.constants import SLURM_SUBMISSION_REGEX_PATTERN
 from app.utils.terminal import run_in_terminal
 
 
-def submit_job(queue: str, core_count: int, job_path: str) -> str | None:
+def submit_job(queue: str, core_count: int, job_path: str, max_tasks_per_node: int | None = None) -> str | None:
     status_code, output = run_in_terminal(
         [
             "sbatch",
             f"--partition={queue}",
-            "--contiguous",
+            "--exclusive",
             "--job-name=`basename $PWD`",
             '--output="stdout.modelops"',
             '--error="stderr.modelops"',
             "--cpus-per-task=1",
+            f"--ntasks-per-node={max_tasks_per_node}" if max_tasks_per_node is not None else "",
             "--ntasks",
             str(core_count),
             job_path,
