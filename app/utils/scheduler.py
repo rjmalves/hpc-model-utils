@@ -5,7 +5,7 @@ from app.utils.constants import SLURM_SUBMISSION_REGEX_PATTERN
 from app.utils.terminal import run_in_terminal
 
 
-def submit_job(queue: str, core_count: int, job_path: str, max_tasks_per_node: int | None = None) -> str | None:
+def submit_job(queue: str, core_count: int, job_path: str, cpus_per_task: int = 1, max_tasks_per_node: int | None = None) -> str | None:
     status_code, output = run_in_terminal(
         [
             "sbatch",
@@ -14,7 +14,7 @@ def submit_job(queue: str, core_count: int, job_path: str, max_tasks_per_node: i
             "--job-name=`basename $PWD`",
             '--output="stdout.modelops"',
             '--error="stderr.modelops"',
-            "--cpus-per-task=1",
+            f"--cpus-per-task={cpus_per_task}",
             f"--ntasks-per-node={max_tasks_per_node}" if max_tasks_per_node is not None else "",
             "--ntasks",
             str(core_count),

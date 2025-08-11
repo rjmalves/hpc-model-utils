@@ -334,6 +334,7 @@ class NEWAVE(AbstractModel):
         job_id = submit_job(queue,
                             core_count,
                             self.NEWAVE_JOB_PATH,
+                            cpus_per_task=2,
                             max_tasks_per_node=NEWAVE_MAX_TASKS_PER_NODE)
         if job_id:
             follow_submitted_job(job_id, self.NEWAVE_JOB_TIMEOUT)
