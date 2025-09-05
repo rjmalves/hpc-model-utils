@@ -705,6 +705,7 @@ class DECOMP(AbstractModel):
             report_files = self._list_report_files(input_files)
             compress_files_to_zip_parallel(report_files, "relatorios", num_cpus)
             cuts_files = self._list_cuts_files(input_files)
+            compress_files_to_zip_parallel(cuts_files, "cortes", num_cpus)
             self._cleanup_files(
                 input_files, report_files, operation_files, cuts_files
             )
