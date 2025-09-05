@@ -402,6 +402,12 @@ class DECOMP(AbstractModel):
                 cut_file = self.CUT_FULL_FILE
             dadger.fc(tipo="NEWCUT").caminho = cut_file
             self._log.info(f"Overwriting cut path: {cut_file}")
+            # Delete unused cut files
+            all_cut_files = cut_by_stage_files + [self.CUT_FULL_FILE]
+            files_to_delete = [f for f in all_cut_files if f != cut_file]
+            self._log.info(f"Deleting unused cut files: {files_to_delete}")
+            clean_files(files_to_delete)
+
         dadger.write(self.arquivos_dat.dadger)
 
     def _evaluate_data_error(self, relato: Relato) -> bool:
