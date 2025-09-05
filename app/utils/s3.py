@@ -40,7 +40,7 @@ def check_items_in_bucket(
         ]
     except Exception:
         return []
-    return objects
+    return list(set(objects))
 
 
 def upload_file_to_bucket(
