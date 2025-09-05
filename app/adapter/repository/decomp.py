@@ -359,6 +359,9 @@ class DECOMP(AbstractModel):
                     parent_file, members=files_to_extract
                 )
                 self._log.info(f"Extracted parent files: {extracted_files}")
+            if isfile(self.CUT_FILE):
+                clean_files([self.CUT_FILE])
+                self._log.info(f"Removed parent zip file: {self.CUT_FILE}")
 
         te = self.dadger.te
         dt = self.dadger.dt
