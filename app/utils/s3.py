@@ -159,7 +159,7 @@ def check_and_download_bucket_items(
         raise RuntimeError(f"Items {remote_filepaths} not downloaded")
     else:
         logger.info(f"Downloaded items to: {downloaded_filepaths}")
-        return downloaded_filepaths
+        return list(set(downloaded_filepaths))
 
 
 def check_and_get_bucket_item(
