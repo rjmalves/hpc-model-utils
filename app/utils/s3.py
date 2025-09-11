@@ -79,7 +79,7 @@ def download_bucket_items(
         filepath = join(destination, filename)
         bucket.download_file(p, filepath)
         success_downloaded_paths.append(filepath)
-    return success_downloaded_paths
+    return list(set(success_downloaded_paths))
 
 
 def get_bucket_items(
