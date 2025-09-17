@@ -29,6 +29,8 @@ STATUS_DIAGNOSIS_FILE="status.modelops"
 UTILS_APP="./hpc-model-utils/venv/bin/hpc-model-utils"
 SYNTHESIS_APP="./sintetizador-newave/venv/bin/sintetizador-newave"
 
+sleep 3600 # test
+
 # Runs the model
 if [ $NUM_CPUS -eq 1 ]; then
     $NEWAVE
