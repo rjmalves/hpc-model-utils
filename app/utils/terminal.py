@@ -28,7 +28,15 @@ def run_in_terminal(
         stdout = subprocess_pipe.stdout
         if stdout is None:
             raise ValueError(f"Error in subprocess execution: {cmd}")
-        stdout_line = stdout.readline()
+        try:
+            stdout_line = stdout.readline()
+        except UnicodeDecodeError:
+            stdout_line = ""
+            if log_output:
+                print(
+                    "Erro de decodificação UTF-8 - linha contém caracteres inválidos!!!",
+                    flush=True,
+                )
         output_line = stdout_line.rstrip()
         if output_line not in output_lines[-last_lines_diff:]:
             if log_output:
