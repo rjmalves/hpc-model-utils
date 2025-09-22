@@ -1,12 +1,16 @@
 class ModelOpsCommands:
     @staticmethod
     def set_model_error():
-        text = _modelops_wrapper("CurrentExecution.SetModelError()")
+        text = _modelops_wrapper("CurrentExecution.SetRuntimeError()")
+        # TODO - restore when bug is fixed
+        # text = _modelops_wrapper("CurrentExecution.SetModelError()")
         _send_command(text)
 
     @staticmethod
     def set_data_error():
-        text = _modelops_wrapper("CurrentExecution.SetDataError()")
+        text = _modelops_wrapper("CurrentExecution.SetRuntimeError()")
+        # TODO - restore when bug is fixed
+        # text = _modelops_wrapper("CurrentExecution.SetDataError()")
         _send_command(text)
 
     @staticmethod
