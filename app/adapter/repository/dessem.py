@@ -316,6 +316,7 @@ class DESSEM(AbstractModel):
         self._log.info("Forcing encoding to utf-8")
         for f in listdir():
             if f in self.LICENSE_FILENAMES:
+                self._log.info(f"Ignoring license file: {f}!")
                 continue
             cast_encoding_to_utf8(f)
 
