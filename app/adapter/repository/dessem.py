@@ -315,6 +315,8 @@ class DESSEM(AbstractModel):
 
         self._log.info("Forcing encoding to utf-8")
         for f in listdir():
+            if f in self.LICENSE_FILENAMES:
+                continue
             cast_encoding_to_utf8(f)
 
         # Unzips the parent files
