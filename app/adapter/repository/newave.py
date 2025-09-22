@@ -149,19 +149,11 @@ class NEWAVE(AbstractModel):
             bucket, MODEL_EXECUTABLE_DIRECTORY, key, self._log
         )
         for filepath in downloaded_filepaths:
-            if any([
-                license_filename in filepath
-                for license_filename in self.LICENSE_FILENAMES
-            ]):
-                license_filename = filepath.split("/")[-1]
-                move(filepath, join(curdir, license_filename))
-                self._log.info(f"Moved {filepath} to {license_filename}")
-            else:
-                change_file_permission(filepath, MODEL_EXECUTABLE_PERMISSIONS)
-                self._log.info(
-                    f"Changed {filepath} permissions to"
-                    + f" {MODEL_EXECUTABLE_PERMISSIONS:o}"
-                )
+            change_file_permission(filepath, MODEL_EXECUTABLE_PERMISSIONS)
+            self._log.info(
+                f"Changed {filepath} permissions to"
+                + f" {MODEL_EXECUTABLE_PERMISSIONS:o}"
+            )
 
         metadata = {
             METADATA_MODEL_NAME: self.MODEL_NAME.upper(),
@@ -278,7 +270,7 @@ class NEWAVE(AbstractModel):
         self._log.info("Forcing encoding to utf-8")
         for f in listdir():
             if f in self.LICENSE_FILENAMES:
-                self._log.info(f"Ignoring license file: {f}!")
+                self._log.info(f"Ignoring license file: {f}")
                 continue
             cast_encoding_to_utf8(f)
 
@@ -303,6 +295,16 @@ class NEWAVE(AbstractModel):
                     parent_file, members=files_to_extract
                 )
                 self._log.info(f"Extracted parent files: {extracted_files}")
+
+        # Copies license file
+        for license_filename in self.LICENSE_FILENAMES:
+            license_path = join(MODEL_EXECUTABLE_DIRECTORY, license_filename)
+            if isfile(license_path):
+                move(
+                    license_path,
+                    join(curdir, license_filename),
+                )
+                self._log.info(f"Moved {license_filename} to executables dir")
 
         study_name = self.dger.nome_caso
         study_year = self.dger.ano_inicio_estudo
