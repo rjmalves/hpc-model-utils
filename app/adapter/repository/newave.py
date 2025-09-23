@@ -71,7 +71,7 @@ class NEWAVE(AbstractModel):
     MODEL_ENTRY_FILE = "caso.dat"
     NWLISTCF_ENTRY_FILE = "arquivos.dat"
     LIBS_ENTRY_FILE = "indices.csv"
-    LICENSE_FILENAMES = ["newave.lic", "ddsNEWAVE.cep"]
+    LICENSE_FILENAMES = ["newave.lic", "ddsNEWAVE.cep", "newave.cep"]
     CUT_FILE = "cortes.zip"
     RESOURCES_FILE = "recursos.zip"
     SIMULATION_FILE = "simulacao.zip"

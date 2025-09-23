@@ -64,7 +64,7 @@ class DESSEM(AbstractModel):
     MODEL_ENTRY_FILE = "dessem.arq"
     NWLISTCF_ENTRY_FILE = "arquivos.dat"
     LIBS_ENTRY_FILE = "indices.csv"
-    LICENSE_FILENAMES = ["dessem.lic", "ddsDESSEM.cep"]
+    LICENSE_FILENAMES = ["dessem.lic", "ddsDESSEM.cep", "dessem.cep"]
     CUT_FILE = "cortes.zip"
     RESOURCES_FILE = "recursos.zip"
     SIMULATION_FILE = "simulacao.zip"
