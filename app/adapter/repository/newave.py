@@ -556,6 +556,8 @@ class NEWAVE(AbstractModel):
             "volref_saz.dat",
             arquivos_dat.cortesh_pos_estudo,
             arquivos_dat.cortes_pos_estudo,
+            arquivos_dat.volume_referencia_sazonal,
+            arquivos_dat.eliminacao_cortes
         ]
         index_file = (
             [self.LIBS_ENTRY_FILE] if self.LIBS_ENTRY_FILE in listdir() else []
@@ -629,6 +631,7 @@ class NEWAVE(AbstractModel):
             "CONVERG.TMP",
             "ETAPA.TMP",
             "TAREFA.TMP",
+            "mensagens.csv",
             "indice_saida.csv",
         ]
         report_output_file_regex = [
@@ -768,6 +771,7 @@ class NEWAVE(AbstractModel):
             "newave.tim",
             arquivos_dat.pmo,
             arquivos_dat.dados_simulacao_final,
+            "mensagens.csv"
         ]
         keeping_files = [a for a in keeping_files if a is not None]
         compressed_files = (
