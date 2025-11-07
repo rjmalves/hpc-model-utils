@@ -32,12 +32,12 @@ from app.utils.constants import (
     METADATA_STUDY_STARTING_DATE,
     MODEL_EXECUTABLE_DIRECTORY,
     MODEL_EXECUTABLE_PERMISSIONS,
+    NEWAVE_MAX_TASKS_PER_NODE,
     OUTPUTS_PREFIX,
     PROCESSED_DECK_FILE,
     RAW_DECK_FILE,
     STATUS_DIAGNOSIS_FILE,
     SYNTHESIS_DIR,
-    NEWAVE_MAX_TASKS_PER_NODE
 )
 from app.utils.fs import (
     change_file_permission,
@@ -336,11 +336,13 @@ class NEWAVE(AbstractModel):
     ):
         self._log.info(f"Job script file: {self.NEWAVE_JOB_PATH}")
         environ["PATH"] += ":" + ":".join([mpich_path, slurm_path])
-        job_id = submit_job(queue,
-                            core_count,
-                            self.NEWAVE_JOB_PATH,
-                            cpus_per_task=2,
-                            max_tasks_per_node=NEWAVE_MAX_TASKS_PER_NODE)
+        job_id = submit_job(
+            queue,
+            core_count,
+            self.NEWAVE_JOB_PATH,
+            cpus_per_task=2,
+            max_tasks_per_node=NEWAVE_MAX_TASKS_PER_NODE,
+        )
         if job_id:
             follow_submitted_job(job_id, self.NEWAVE_JOB_TIMEOUT)
 
@@ -556,7 +558,7 @@ class NEWAVE(AbstractModel):
             arquivos_dat.cortesh_pos_estudo,
             arquivos_dat.cortes_pos_estudo,
             arquivos_dat.volume_referencia_sazonal,
-            arquivos_dat.eliminacao_cortes
+            arquivos_dat.eliminacao_cortes,
         ]
         index_file = (
             [self.LIBS_ENTRY_FILE] if self.LIBS_ENTRY_FILE in listdir() else []
@@ -588,7 +590,7 @@ class NEWAVE(AbstractModel):
         ]
         nwlistop_files = ["nwlistop.dat"]
         nwlistop_files += list_files_by_regexes(
-            input_files, nwlistop_output_file_regex
+            input_files + ["MENSAGENS.CSV"], nwlistop_output_file_regex
         )
 
         self._log.info(f"Files considered as operation: {nwlistop_files}")
@@ -770,7 +772,7 @@ class NEWAVE(AbstractModel):
             "newave.tim",
             arquivos_dat.pmo,
             arquivos_dat.dados_simulacao_final,
-            "MENSAGENS.CSV"
+            "MENSAGENS.CSV",
         ]
         keeping_files = [a for a in keeping_files if a is not None]
         compressed_files = (
