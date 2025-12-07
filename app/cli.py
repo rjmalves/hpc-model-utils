@@ -107,7 +107,7 @@ cli.add_command(preprocess)
 @click.argument("model_name", type=str)
 @click.argument("queue", type=str)
 @click.argument("core_count", type=int)
-@click.argument("max_cores_per_node", type=int, default=None)
+@click.option("--max-cores-per-node", type=int, default=None)
 @click.option("--mpich-path", type=str, default=MPICH_PATH)
 @click.option("--slurm-path", type=str, default=SLURM_PATH)
 def run(
