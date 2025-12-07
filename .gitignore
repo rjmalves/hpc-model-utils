@@ -162,3 +162,7 @@ cython_debug/
 # UV
 
 uv.lock
+
+# LocalStack
+.env.localstack
+localstack-data/

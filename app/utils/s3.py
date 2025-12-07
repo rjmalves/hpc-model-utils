@@ -6,6 +6,7 @@ from os.path import join
 import boto3
 
 from app.utils.constants import AWS_ACCESS_KEY_ID_ENV, AWS_SECRET_ACCESS_KEY_ENV
+from app.utils.s3_client import get_s3_resource
 
 boto3.set_stream_logger("", CRITICAL)
 
@@ -27,8 +28,7 @@ def check_items_in_bucket(
     aws_access_key_id: str | None = None,
     aws_secret_access_key: str | None = None,
 ) -> list[str]:
-    s3 = boto3.resource(
-        "s3",
+    s3 = get_s3_resource(
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
     )
@@ -50,8 +50,7 @@ def upload_file_to_bucket(
     aws_access_key_id: str | None = None,
     aws_secret_access_key: str | None = None,
 ):
-    s3 = boto3.resource(
-        "s3",
+    s3 = get_s3_resource(
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
     )
@@ -65,8 +64,7 @@ def download_bucket_items(
     aws_access_key_id: str | None = None,
     aws_secret_access_key: str | None = None,
 ) -> list[str]:
-    s3 = boto3.resource(
-        "s3",
+    s3 = get_s3_resource(
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
     )
@@ -88,8 +86,7 @@ def get_bucket_items(
     aws_access_key_id: str | None = None,
     aws_secret_access_key: str | None = None,
 ) -> dict[str, str]:
-    s3 = boto3.resource(
-        "s3",
+    s3 = get_s3_resource(
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
     )
@@ -110,8 +107,7 @@ def delete_bucket_items(
     aws_access_key_id: str | None = None,
     aws_secret_access_key: str | None = None,
 ) -> list[str]:
-    s3 = boto3.resource(
-        "s3",
+    s3 = get_s3_resource(
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
     )

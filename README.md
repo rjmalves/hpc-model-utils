@@ -84,3 +84,131 @@ A execução do modelo também realiza a chamada ao [sintetizador-decomp](https:
 #### DESSEM
 
 A execução do modelo também realiza a chamada ao [sintetizador-dessem](https://github.com/rjmalves/sintetizador-dessem).
+
+## Desenvolvimento e Testes
+
+### Testes de Integração com S3 (LocalStack)
+
+Este projeto utiliza [LocalStack](https://localstack.cloud/) para testar operações S3 localmente, sem necessidade de credenciais AWS ou custos. Isto permite testes de integração completos das operações de upload, download e listagem de arquivos no S3.
+
+#### Pré-requisitos
+
+- Docker e Docker Compose instalados
+- Porta 4566 disponível localmente
+
+#### Configuração Rápida
+
+```bash
+# 1. Iniciar LocalStack
+docker-compose -f docker-compose.localstack.yml up -d
+
+# 2. Verificar status do LocalStack
+curl http://localhost:4566/_localstack/health
+
+# 3. Configurar variáveis de ambiente (opcional)
+source .env.localstack.example
+
+# 4. Executar testes de integração
+uv run pytest tests/integration/ -v -m integration
+
+# 5. Parar LocalStack
+docker-compose -f docker-compose.localstack.yml down
+```
+
+#### Tipos de Testes
+
+**Testes Unitários** (rápidos, sem dependências externas):
+
+```bash
+# Executar apenas testes unitários
+uv run pytest tests/ -v -m "not integration"
+
+# Com coverage
+uv run pytest tests/ -v -m "not integration" --cov=app --cov-report=html
+```
+
+**Testes de Integração** (requerem LocalStack):
+
+```bash
+# Todos os testes de integração
+uv run pytest tests/integration/ -v -m integration
+
+# Testes específicos
+uv run pytest tests/integration/test_s3_operations.py -v
+
+# Pular testes lentos (>1000 objetos)
+uv run pytest tests/integration/ -v -m "integration and not slow"
+```
+
+#### Estrutura de Testes
+
+```
+tests/
+├── adapter/           # Testes unitários com mocks
+├── integration/       # Testes de integração com LocalStack
+│   ├── conftest.py                # Fixtures compartilhados
+│   ├── test_s3_operations.py     # Operações básicas S3
+│   ├── test_s3_helpers.py        # Funções auxiliares
+│   └── test_s3_edge_cases.py     # Casos extremos
+└── mocks/             # Dados de teste
+```
+
+#### Cobertura de Testes de Integração
+
+Os testes de integração cobrem todas as operações S3:
+
+- ✅ `check_items_in_bucket()` - Listagem de objetos
+- ✅ `download_bucket_items()` - Download de arquivos
+- ✅ `upload_file_to_bucket()` - Upload de arquivos
+- ✅ `get_bucket_items()` - Obtenção de conteúdo
+- ✅ `delete_bucket_items()` - Deleção de objetos
+- ✅ Funções auxiliares de alto nível
+- ✅ Casos especiais: Unicode, paginação (>1000 objetos), nomes longos
+
+#### Solução de Problemas
+
+**LocalStack não inicia:**
+
+```bash
+# Verificar se porta está em uso
+lsof -ti:4566 | xargs kill -9
+
+# Remover containers antigos e reiniciar
+docker-compose -f docker-compose.localstack.yml down -v
+docker-compose -f docker-compose.localstack.yml up -d
+```
+
+**Testes falhando com erros de conexão:**
+
+```bash
+# Aguardar LocalStack ficar pronto
+timeout 60 bash -c 'until curl -s http://localhost:4566/_localstack/health | grep -q "\"s3\": \"running\""; do sleep 2; done'
+```
+
+**Erros de importação:**
+
+```bash
+# Reinstalar dependências
+uv sync --dev
+```
+
+#### Comandos Úteis
+
+```bash
+# Ver logs do LocalStack
+docker logs hpc-model-utils-localstack -f
+
+# Listar buckets no LocalStack
+aws --endpoint-url=http://localhost:4566 s3 ls
+
+# Executar teste específico
+uv run pytest tests/integration/test_s3_operations.py::TestCheckItemsInBucket::test_finds_existing_object -v
+
+# Coverage completo
+uv run pytest --cov=app --cov-report=html
+open htmlcov/index.html
+```
+
+#### Integração CI/CD
+
+Os testes de integração executam automaticamente no GitHub Actions para cada Pull Request. O LocalStack é iniciado como um service container e os testes são executados em paralelo com as versões Python 3.10, 3.11 e 3.12.

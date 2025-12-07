@@ -439,7 +439,12 @@ class DESSEM(AbstractModel):
             self._edit_core_count_operut(core_count)
 
     def run(
-        self, queue: str, core_count: int, mpich_path: str, slurm_path: str
+        self,
+        queue: str,
+        core_count: int,
+        mpich_path: str,
+        slurm_path: str,
+        max_cores_per_node: int | None = None,
     ):
         self._edit_core_count(core_count)
         self._log.info(f"Script file: {self.DESSEM_PATH}")

@@ -459,11 +459,21 @@ class DECOMP(AbstractModel):
                 return True
 
     def run(
-        self, queue: str, core_count: int, mpich_path: str, slurm_path: str
+        self,
+        queue: str,
+        core_count: int,
+        mpich_path: str,
+        slurm_path: str,
+        max_cores_per_node: int | None = None,
     ):
         self._log.info(f"Job script file: {self.DECOMP_JOB_PATH}")
         environ["PATH"] += ":" + ":".join([mpich_path, slurm_path])
-        job_id = submit_job(queue, core_count, self.DECOMP_JOB_PATH)
+        job_id = submit_job(
+            queue,
+            core_count,
+            self.DECOMP_JOB_PATH,
+            max_tasks_per_node=max_cores_per_node,
+        )
         if job_id:
             follow_submitted_job(job_id, self.DECOMP_JOB_TIMEOUT)
 

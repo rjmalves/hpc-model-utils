@@ -32,7 +32,6 @@ from app.utils.constants import (
     METADATA_STUDY_STARTING_DATE,
     MODEL_EXECUTABLE_DIRECTORY,
     MODEL_EXECUTABLE_PERMISSIONS,
-    NEWAVE_MAX_TASKS_PER_NODE,
     OUTPUTS_PREFIX,
     PROCESSED_DECK_FILE,
     RAW_DECK_FILE,
@@ -71,7 +70,12 @@ class NEWAVE(AbstractModel):
     MODEL_ENTRY_FILE = "caso.dat"
     NWLISTCF_ENTRY_FILE = "arquivos.dat"
     LIBS_ENTRY_FILE = "indices.csv"
-    LICENSE_FILENAMES = ["newave.lic", "ddsNEWAVE.cep", "newave.cep", "newave_trial.cep"]
+    LICENSE_FILENAMES = [
+        "newave.lic",
+        "ddsNEWAVE.cep",
+        "newave.cep",
+        "newave_trial.cep",
+    ]
     CUT_FILE = "cortes.zip"
     RESOURCES_FILE = "recursos.zip"
     SIMULATION_FILE = "simulacao.zip"
@@ -332,7 +336,12 @@ class NEWAVE(AbstractModel):
         self.dger.write(self.arquivos_dat.dger)
 
     def run(
-        self, queue: str, core_count: int, mpich_path: str, slurm_path: str
+        self,
+        queue: str,
+        core_count: int,
+        mpich_path: str,
+        slurm_path: str,
+        max_cores_per_node: int | None = None,
     ):
         self._log.info(f"Job script file: {self.NEWAVE_JOB_PATH}")
         environ["PATH"] += ":" + ":".join([mpich_path, slurm_path])
@@ -341,7 +350,7 @@ class NEWAVE(AbstractModel):
             core_count,
             self.NEWAVE_JOB_PATH,
             cpus_per_task=2,
-            max_tasks_per_node=NEWAVE_MAX_TASKS_PER_NODE,
+            max_tasks_per_node=max_cores_per_node,
         )
         if job_id:
             follow_submitted_job(job_id, self.NEWAVE_JOB_TIMEOUT)

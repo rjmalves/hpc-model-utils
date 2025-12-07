@@ -33,6 +33,9 @@ dev = [
   "ruff",
   "mypy",
   "pytest",
+  "pytest-cov>=6.0.0",
+  "pytest-timeout>=2.2.0",
+  "requests>=2.31.0",
   "boto3-stubs[essential]"
 ]
 
@@ -54,7 +57,25 @@ include = [
 [tool.ruff]
 line-length = 80
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: Integration tests requiring LocalStack (deselect with '-m \"not integration\"')",
+    "slow: Slow tests that may take longer to run",
+]
+timeout = 300
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+]
+
 [dependency-groups]
 dev = [
+    "boto3-stubs[s3]>=1.42.4",
     "pytest-cov>=6.0.0",
+    "pytest-timeout>=2.4.0",
+    "requests>=2.32.5",
 ]

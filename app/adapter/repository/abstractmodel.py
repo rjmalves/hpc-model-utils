@@ -54,7 +54,12 @@ class AbstractModel(ABC):
 
     @abstractmethod
     def run(
-        self, queue: str, core_count: int, mpich_path: str, slurm_path: str
+        self,
+        queue: str,
+        core_count: int,
+        mpich_path: str,
+        slurm_path: str,
+        max_cores_per_node: int | None = None,
     ):
         raise NotImplementedError
 
