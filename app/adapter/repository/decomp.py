@@ -510,6 +510,7 @@ class DECOMP(AbstractModel):
         self._update_metadata(metadata)
         for key, value in metadata.items():
             ModelOpsCommands.set_metadata(key=key, value=value)
+        self._set_status()
         return status_value
 
     def postprocess(self):
