@@ -476,6 +476,7 @@ class DECOMP(AbstractModel):
         )
         if job_id:
             follow_submitted_job(job_id, self.DECOMP_JOB_TIMEOUT)
+        self._set_status()
 
     def generate_execution_status(self, job_id: str) -> str:
         self._log.info("Reading 'dadger' file for generating status...")
@@ -510,7 +511,6 @@ class DECOMP(AbstractModel):
         self._update_metadata(metadata)
         for key, value in metadata.items():
             ModelOpsCommands.set_metadata(key=key, value=value)
-        self._set_status()
         return status_value
 
     def postprocess(self):

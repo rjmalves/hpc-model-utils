@@ -354,6 +354,7 @@ class NEWAVE(AbstractModel):
         )
         if job_id:
             follow_submitted_job(job_id, self.NEWAVE_JOB_TIMEOUT)
+        self._set_status()
 
     def generate_execution_status(self, job_id: str) -> str:
         self._log.info("Reading 'pmo.dat' file for generating status...")
@@ -929,9 +930,6 @@ class NEWAVE(AbstractModel):
 
     def result_upload(self, path: str):
         ModelOpsCommands.set_execution_artifacts_path(path)
-
-        self._set_status()
-
         self._log.info(f"Uploading results for {self.MODEL_NAME}")
         self._upload_input_echo(path)
         self._upload_outputs(path)
