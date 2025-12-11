@@ -451,7 +451,6 @@ class DESSEM(AbstractModel):
         run_in_terminal(
             [self.DESSEM_PATH], timeout=self.DESSEM_TIMEOUT, log_output=True
         )
-        self._set_status()
 
     def generate_execution_status(self, job_id: str) -> str:
         self._log.info("Reading 'DES_LOG_RELATO' file for generating status...")
@@ -729,6 +728,9 @@ class DESSEM(AbstractModel):
 
     def result_upload(self, path: str):
         ModelOpsCommands.set_execution_artifacts_path(path)
+
+        self._set_status()
+
         self._log.info(f"Uploading results for {self.MODEL_NAME}")
 
         self._upload_input_echo(path)

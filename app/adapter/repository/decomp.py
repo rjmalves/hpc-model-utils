@@ -476,7 +476,6 @@ class DECOMP(AbstractModel):
         )
         if job_id:
             follow_submitted_job(job_id, self.DECOMP_JOB_TIMEOUT)
-        self._set_status()
 
     def generate_execution_status(self, job_id: str) -> str:
         self._log.info("Reading 'dadger' file for generating status...")
@@ -825,6 +824,8 @@ class DECOMP(AbstractModel):
 
     def result_upload(self, path: str):
         ModelOpsCommands.set_execution_artifacts_path(path)
+
+        self._set_status()
 
         self._log.info(f"Uploading results for {self.MODEL_NAME}")
 
