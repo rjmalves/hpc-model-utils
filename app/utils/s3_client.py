@@ -22,6 +22,10 @@ def get_s3_resource(
     2. AWS_ENDPOINT_URL environment variable
     3. None (uses default AWS S3)
 
+    When no explicit credentials are provided, the client uses the default
+    credential provider chain (environment variables, EC2 instance metadata,
+    ECS task role, etc.)
+
     Args:
         aws_access_key_id: AWS access key (optional)
         aws_secret_access_key: AWS secret key (optional)
@@ -31,7 +35,7 @@ def get_s3_resource(
         Configured boto3 S3 resource
 
     Example:
-        # Production (AWS S3)
+        # Production (AWS S3 with EC2 instance role)
         s3 = get_s3_resource()
 
         # LocalStack testing
@@ -46,9 +50,14 @@ def get_s3_resource(
 
     kwargs: dict[str, Any] = {
         "service_name": "s3",
-        "aws_access_key_id": aws_access_key_id,
-        "aws_secret_access_key": aws_secret_access_key,
     }
+
+    # Only set explicit credentials if both are provided
+    # Otherwise, let boto3 use the default credential provider chain
+    # (environment variables, EC2 instance metadata, ECS task role, etc.)
+    if aws_access_key_id and aws_secret_access_key:
+        kwargs["aws_access_key_id"] = aws_access_key_id
+        kwargs["aws_secret_access_key"] = aws_secret_access_key
 
     if endpoint_url is not None:
         kwargs["endpoint_url"] = endpoint_url
