@@ -599,7 +599,7 @@ class NEWAVE(AbstractModel):
         ]
         nwlistop_files = ["nwlistop.dat"]
         nwlistop_files += list_files_by_regexes(
-            input_files + ["MENSAGENS.CSV"], nwlistop_output_file_regex
+            input_files + ["mensagens.csv"], nwlistop_output_file_regex
         )
 
         self._log.info(f"Files considered as operation: {nwlistop_files}")
@@ -641,7 +641,7 @@ class NEWAVE(AbstractModel):
             "CONVERG.TMP",
             "ETAPA.TMP",
             "TAREFA.TMP",
-            "MENSAGENS.CSV",
+            "mensagens.csv",
             "indice_saida.csv",
         ]
         report_output_file_regex = [
@@ -781,7 +781,7 @@ class NEWAVE(AbstractModel):
             "newave.tim",
             arquivos_dat.pmo,
             arquivos_dat.dados_simulacao_final,
-            "MENSAGENS.CSV",
+            "mensagens.csv",
         ]
         keeping_files = [a for a in keeping_files if a is not None]
         compressed_files = (
