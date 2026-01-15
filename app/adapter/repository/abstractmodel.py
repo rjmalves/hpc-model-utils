@@ -60,6 +60,7 @@ class AbstractModel(ABC):
         mpich_path: str,
         slurm_path: str,
         max_cores_per_node: int | None = None,
+        max_job_time_hours: int | None = None,
     ):
         raise NotImplementedError
 

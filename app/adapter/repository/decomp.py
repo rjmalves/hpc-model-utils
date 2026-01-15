@@ -465,6 +465,7 @@ class DECOMP(AbstractModel):
         mpich_path: str,
         slurm_path: str,
         max_cores_per_node: int | None = None,
+        max_job_time_hours: int | None = None,
     ):
         self._log.info(f"Job script file: {self.DECOMP_JOB_PATH}")
         environ["PATH"] += ":" + ":".join([mpich_path, slurm_path])
@@ -473,6 +474,7 @@ class DECOMP(AbstractModel):
             core_count,
             self.DECOMP_JOB_PATH,
             max_tasks_per_node=max_cores_per_node,
+            max_job_time_hours=max_job_time_hours,
         )
         if job_id:
             follow_submitted_job(job_id, self.DECOMP_JOB_TIMEOUT)

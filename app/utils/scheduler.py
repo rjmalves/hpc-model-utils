@@ -5,7 +5,11 @@ from app.utils.constants import SLURM_SUBMISSION_REGEX_PATTERN
 from app.utils.terminal import run_in_terminal
 
 
-def submit_job(queue: str, core_count: int, job_path: str, cpus_per_task: int = 1, max_tasks_per_node: int | None = None) -> str | None:
+def submit_job(queue: str, core_count: int, job_path: str, cpus_per_task: int = 1, max_tasks_per_node: int | None = None, max_job_time_hours: int | None = None) -> str | None:
+    job_duration_days = max_job_time_hours // 24 if max_job_time_hours is not None else 0
+    job_duration_hours = max_job_time_hours % 24 if max_job_time_hours is not None else 0
+    formatted_job_time_str = f"{job_duration_days}-{job_duration_hours:02}:00:00" if max_job_time_hours is not None else ""
+    
     status_code, output = run_in_terminal(
         [
             "sbatch",
@@ -16,6 +20,7 @@ def submit_job(queue: str, core_count: int, job_path: str, cpus_per_task: int = 
             '--error="stderr.modelops"',
             f"--cpus-per-task={cpus_per_task}",
             f"--ntasks-per-node={max_tasks_per_node}" if max_tasks_per_node is not None else "",
+            f"--time={formatted_job_time_str}" if max_job_time_hours is not None else "",
             "--ntasks",
             str(core_count),
             job_path,

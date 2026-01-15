@@ -108,10 +108,11 @@ cli.add_command(preprocess)
 @click.argument("queue", type=str)
 @click.argument("core_count", type=int)
 @click.option("--max-cores-per-node", type=int, default=None)
+@click.option("--max-job-time-hours", type=int, default=None)
 @click.option("--mpich-path", type=str, default=MPICH_PATH)
 @click.option("--slurm-path", type=str, default=SLURM_PATH)
 def run(
-    model_name, queue, core_count, max_cores_per_node, mpich_path, slurm_path
+    model_name, queue, core_count, max_cores_per_node, max_job_time_hours, mpich_path, slurm_path
 ):
     """
     Runs the model by submitting to a job scheduler.
@@ -124,7 +125,7 @@ def run(
         )
         model_type = ModelFactory().factory(model_name, logger)
         model_type.run(
-            queue, core_count, mpich_path, slurm_path, max_cores_per_node
+            queue, core_count, mpich_path, slurm_path, max_cores_per_node, max_job_time_hours
         )
         logger.info("Model execution terminated")
     except Exception as e:
