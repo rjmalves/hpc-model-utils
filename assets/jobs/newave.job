@@ -22,6 +22,7 @@
 
 # Inputs and important variables
 NUM_CPUS=$1
+SKIP_MODEL=$2
 MODEL_NAME="newave"
 EXEC="mpiexec"
 NEWAVE="./assets/newave"
@@ -29,11 +30,14 @@ STATUS_DIAGNOSIS_FILE="status.modelops"
 UTILS_APP="./hpc-model-utils/venv/bin/hpc-model-utils"
 SYNTHESIS_APP="./sintetizador-newave/venv/bin/sintetizador-newave"
 
+
 # Runs the model
-if [ $NUM_CPUS -eq 1 ]; then
-    $NEWAVE
-else
-    $EXEC -np $NUM_CPUS $NEWAVE
+if [ "$SKIP_MODEL" != "true" ]; then
+    if [ $NUM_CPUS -eq 1 ]; then
+        $NEWAVE
+    else
+        $EXEC -np $NUM_CPUS $NEWAVE
+    fi
 fi
 
 $UTILS_APP generate_execution_status $MODEL_NAME --job-id $SLURM_JOB_ID

@@ -445,6 +445,7 @@ class DESSEM(AbstractModel):
         mpich_path: str,
         slurm_path: str,
         max_cores_per_node: int | None = None,
+        skip_model: bool = False,
     ):
         self._edit_core_count(core_count)
         self._log.info(f"Script file: {self.DESSEM_PATH}")

@@ -466,6 +466,7 @@ class DECOMP(AbstractModel):
         slurm_path: str,
         max_cores_per_node: int | None = None,
         max_job_time_hours: int | None = None,
+        skip_model: bool = False,
     ):
         self._log.info(f"Job script file: {self.DECOMP_JOB_PATH}")
         environ["PATH"] += ":" + ":".join([mpich_path, slurm_path])

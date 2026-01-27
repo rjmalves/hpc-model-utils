@@ -156,7 +156,7 @@ class GEVAZP(AbstractModel):
         pass
 
     def run(
-        self, queue: str, core_count: int, mpich_path: str, slurm_path: str
+        self, queue: str, core_count: int, mpich_path: str, slurm_path: str, skip_model: bool = False,
     ):
         self._log.info(f"Job script file: {self.GEVAZP_JOB_PATH}")
         code, _ = run_in_terminal(

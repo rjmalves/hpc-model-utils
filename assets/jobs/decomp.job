@@ -22,6 +22,7 @@
 
 # Inputs and important variables
 NUM_CPUS=$1
+SKIP_MODEL=$2
 MODEL_NAME="decomp"
 EXEC="mpiexec"
 DECOMP="./assets/decomp"
@@ -30,10 +31,12 @@ UTILS_APP="./hpc-model-utils/venv/bin/hpc-model-utils"
 SYNTHESIS_APP="./sintetizador-decomp/venv/bin/sintetizador-decomp"
 
 # Runs the model
-if [ $NUM_CPUS -eq 1 ]; then
-    $DECOMP
-else
-    $EXEC -np $NUM_CPUS $DECOMP
+if [ "$SKIP_MODEL" != "true" ]; then
+    if [ $NUM_CPUS -eq 1 ]; then
+        $DECOMP
+    else
+        $EXEC -np $NUM_CPUS $DECOMP
+    fi
 fi
 
 $UTILS_APP generate_execution_status $MODEL_NAME --job-id $SLURM_JOB_ID
