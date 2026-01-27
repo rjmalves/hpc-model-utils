@@ -320,5 +320,8 @@ class GEVAZP(AbstractModel):
             environ["PATH"] += f":{slurm_path}"
             self._log.info(f"Canceling job {job_id}")
 
+    def download_executed_run(self, outputs_path: str, delete: bool = True):
+        raise NotImplementedError
+
 
 ModelFactory().register(GEVAZP.MODEL_NAME, GEVAZP)

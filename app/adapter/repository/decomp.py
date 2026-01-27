@@ -844,5 +844,8 @@ class DECOMP(AbstractModel):
             cancel_submitted_job(job_id)
             wait_cancelled_job(job_id, JOB_CANCELLATION_TIMEOUT)
 
+    def download_executed_run(self, outputs_path: str, delete: bool = True):
+        raise NotImplementedError
+
 
 ModelFactory().register(DECOMP.MODEL_NAME, DECOMP)

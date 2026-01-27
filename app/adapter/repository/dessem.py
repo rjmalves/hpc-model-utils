@@ -743,4 +743,8 @@ class DESSEM(AbstractModel):
         raise NotImplementedError
 
 
+    def download_executed_run(self, outputs_path: str, delete: bool = True):
+        raise NotImplementedError
+
+
 ModelFactory().register(DESSEM.MODEL_NAME, DESSEM)

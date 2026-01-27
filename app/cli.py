@@ -244,3 +244,25 @@ def cancel_run(model_name, job_id, slurm_path):
 
 
 cli.add_command(cancel_run)
+
+@click.command("download_executed_run")
+@click.argument("model_name", type=str)
+@click.argument("outputs_path", type=str)
+@click.option("--delete", is_flag=True, default=False)
+def download_executed_run(model_name, outputs_path, delete):
+    """
+    Downloads the executed run outputs from a given path.
+    """
+    logger = Log.configure_logger()
+
+    try:
+        model_type = ModelFactory().factory(model_name, logger)
+        model_type.download_executed_run(outputs_path, delete=delete)
+        logger.info(f"Downloaded executed run outputs from: {outputs_path}")
+    except Exception as e:
+        ModelOpsCommands.set_model_error()
+        logger.exception(str(e))
+        # raise e
+
+
+cli.add_command(download_executed_run)

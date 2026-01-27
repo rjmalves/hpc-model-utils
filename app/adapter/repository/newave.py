@@ -35,6 +35,7 @@ from app.utils.constants import (
     OUTPUTS_PREFIX,
     PROCESSED_DECK_FILE,
     RAW_DECK_FILE,
+    RAW_OUTPUTS_FILE,
     STATUS_DIAGNOSIS_FILE,
     SYNTHESIS_DIR,
 )
@@ -947,6 +948,30 @@ class NEWAVE(AbstractModel):
             self._log.info(f"Canceling job {job_id}")
             cancel_submitted_job(job_id)
             wait_cancelled_job(job_id, JOB_CANCELLATION_TIMEOUT)
+
+    def download_executed_run(self, outputs_path: str, delete: bool = True):
+        self._log.info(f"Fetching output data in {outputs_path}...")
+
+        path_data = path_to_bucket_and_key(outputs_path)
+        bucket = path_data["bucket"]
+        key = path_data["key"]
+        filename = key.split("/")[-1]
+
+        check_and_download_bucket_items(
+            bucket, str(Path(curdir).resolve()), key, self._log
+        )
+
+        if delete:
+            self._log.info(f"Removing inputs from {outputs_path}...")
+            check_and_delete_bucket_item(bucket, filename, key, self._log)
+
+        self._log.info(f"Renaming input file to {RAW_OUTPUTS_FILE}")
+        move(filename, RAW_OUTPUTS_FILE)
+
+        extracted_files = (
+            extract_zip_content(RAW_OUTPUTS_FILE) if isfile(RAW_OUTPUTS_FILE) else []
+        )
+        self._log.info(f"Extracted output files: {extracted_files}")
 
 
 ModelFactory().register(NEWAVE.MODEL_NAME, NEWAVE)

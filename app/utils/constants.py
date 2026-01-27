@@ -12,7 +12,7 @@ OUTPUTS_PREFIX = "saidas"
 
 RAW_DECK_FILE = "eco_deck.zip"
 PROCESSED_DECK_FILE = "deck_processado.zip"
-
+RAW_OUTPUTS_FILE = "saidas.zip"
 
 EXECUTION_ID_FILE = "id.modelops"
 STATUS_DIAGNOSIS_FILE = "status.modelops"
