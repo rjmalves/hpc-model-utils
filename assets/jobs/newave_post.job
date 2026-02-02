@@ -23,11 +23,16 @@
 # Inputs and important variables
 NUM_CPUS=$1
 MODEL_NAME="newave"
-EXEC="mpiexec"
-NEWAVE="./assets/newave"
+STATUS_DIAGNOSIS_FILE="status.modelops"
+UTILS_APP="./hpc-model-utils/venv/bin/hpc-model-utils"
+SYNTHESIS_APP="./sintetizador-newave/venv/bin/sintetizador-newave"
 
-if [ $NUM_CPUS -eq 1 ]; then
-    $NEWAVE
-else
-    $EXEC -np $NUM_CPUS $NEWAVE
+$UTILS_APP generate_execution_status $MODEL_NAME --job-id $SLURM_JOB_ID
+
+# Only does heavy post-processing on successful runs
+if grep -q "SUCCESS" "$STATUS_DIAGNOSIS_FILE"; then
+    $UTILS_APP postprocess $MODEL_NAME
+    $SYNTHESIS_APP completa --processadores $NUM_CPUS
 fi
+
+$UTILS_APP output_compression_and_cleanup $MODEL_NAME $NUM_CPUS

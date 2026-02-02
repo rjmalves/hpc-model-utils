@@ -78,12 +78,7 @@ class AbstractModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def result_upload(
-        self,
-        compressed_input_file: str,
-        inputs_bucket: str,
-        outputs_bucket: str,
-    ):
+    def result_upload(self, path: str):
         raise NotImplementedError
 
     @abstractmethod

@@ -80,6 +80,7 @@ class DECOMP(AbstractModel):
     NEGATIVE_GAP_PATTERN = "ATENCAO: GAP NEGATIVO"
     MAX_ITERATIONS_PATTERN = "CONVERGENCIA NAO ALCANCADA EM"
     DECOMP_JOB_PATH = "hpc-model-utils/assets/jobs/decomp.job"
+    DECOMP_POST_JOB_PATH = "hpc-model-utils/assets/jobs/decomp_post.job"
     DECOMP_JOB_TIMEOUT = 172800  # 48h
 
     DECK_DATA_CACHING: dict[str, Any] = {}
@@ -233,14 +234,16 @@ class DECOMP(AbstractModel):
                     parent_bucket, remote_filepath, self._log
                 )
             )
-            if any([
-                k not in parent_metadata
-                for k in [
-                    METADATA_MODEL_NAME,
-                    METADATA_STATUS,
-                    METADATA_STUDY_STARTING_DATE,
+            if any(
+                [
+                    k not in parent_metadata
+                    for k in [
+                        METADATA_MODEL_NAME,
+                        METADATA_STATUS,
+                        METADATA_STUDY_STARTING_DATE,
+                    ]
                 ]
-            ]):
+            ):
                 raise ValueError(
                     f"Parent metadata is incomplete [{parent_metadata}]"
                 )
@@ -419,25 +422,31 @@ class DECOMP(AbstractModel):
         dadger.write(self.arquivos_dat.dadger)
 
     def _evaluate_data_error(self, relato: Relato) -> bool:
-        return any([
-            self.DATA_ERROR_PATTERN in b.data
-            for b in relato.data.of_type(DefaultBlock)
-        ])
+        return any(
+            [
+                self.DATA_ERROR_PATTERN in b.data
+                for b in relato.data.of_type(DefaultBlock)
+            ]
+        )
 
     def _evaluate_max_iterations(self, relato: Relato) -> bool:
-        return any([
-            self.MAX_ITERATIONS_PATTERN in b.data
-            for b in relato.data.of_type(DefaultBlock)
-        ])
+        return any(
+            [
+                self.MAX_ITERATIONS_PATTERN in b.data
+                for b in relato.data.of_type(DefaultBlock)
+            ]
+        )
 
     def _evaluate_relato_outputs(self, relato: Relato) -> bool:
         return relato.cmo_medio_submercado is None
 
     def _evaluate_negative_gap(self, relato: Relato) -> bool:
-        return any([
-            self.NEGATIVE_GAP_PATTERN in b.data
-            for b in relato.data.of_type(DefaultBlock)
-        ])
+        return any(
+            [
+                self.NEGATIVE_GAP_PATTERN in b.data
+                for b in relato.data.of_type(DefaultBlock)
+            ]
+        )
 
     def _evaluate_feasibility(
         self, inviab_file: InviabUnic, dadger: Dadger
@@ -470,15 +479,21 @@ class DECOMP(AbstractModel):
     ):
         self._log.info(f"Job script file: {self.DECOMP_JOB_PATH}")
         environ["PATH"] += ":" + ":".join([mpich_path, slurm_path])
-        job_id = submit_job(
-            queue,
-            core_count,
-            self.DECOMP_JOB_PATH,
-            max_tasks_per_node=max_cores_per_node,
-            max_job_time_hours=max_job_time_hours,
+        jobs_to_run = (
+            [self.DECOMP_JOB_PATH, self.DECOMP_POST_JOB_PATH]
+            if not skip_model
+            else [self.DECOMP_POST_JOB_PATH]
         )
-        if job_id:
-            follow_submitted_job(job_id, self.DECOMP_JOB_TIMEOUT)
+        for job_file in jobs_to_run:
+            job_id = submit_job(
+                queue,
+                core_count,
+                job_file,
+                max_tasks_per_node=max_cores_per_node,
+                max_job_time_hours=max_job_time_hours,
+            )
+            if job_id:
+                follow_submitted_job(job_id, self.DECOMP_JOB_TIMEOUT)
 
     def generate_execution_status(self, job_id: str) -> str:
         self._log.info("Reading 'dadger' file for generating status...")

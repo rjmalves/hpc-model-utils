@@ -83,6 +83,7 @@ class NEWAVE(AbstractModel):
     NWLISTCF_EXECUTABLE = join(MODEL_EXECUTABLE_DIRECTORY, "nwlistcf")
     NWLISTOP_EXECUTABLE = join(MODEL_EXECUTABLE_DIRECTORY, "nwlistop")
     NEWAVE_JOB_PATH = "hpc-model-utils/assets/jobs/newave.job"
+    NEWAVE_POST_JOB_PATH = "hpc-model-utils/assets/jobs/newave_post.job"
     NEWAVE_JOB_TIMEOUT = 172800  # 48h
     NWLISTCF_NWLISTOP_TIMEOUT = 3600
 
@@ -206,14 +207,16 @@ class NEWAVE(AbstractModel):
                     parent_bucket, remote_filepath, self._log
                 )
             )
-            if any([
-                k not in parent_metadata
-                for k in [
-                    METADATA_MODEL_NAME,
-                    METADATA_STATUS,
-                    METADATA_STUDY_STARTING_DATE,
+            if any(
+                [
+                    k not in parent_metadata
+                    for k in [
+                        METADATA_MODEL_NAME,
+                        METADATA_STATUS,
+                        METADATA_STUDY_STARTING_DATE,
+                    ]
                 ]
-            ]):
+            ):
                 raise ValueError(
                     f"Parent metadata is incomplete [{parent_metadata}]"
                 )
@@ -348,16 +351,22 @@ class NEWAVE(AbstractModel):
     ):
         self._log.info(f"Job script file: {self.NEWAVE_JOB_PATH}")
         environ["PATH"] += ":" + ":".join([mpich_path, slurm_path])
-        job_id = submit_job(
-            queue,
-            core_count,
-            self.NEWAVE_JOB_PATH,
-            cpus_per_task=2,
-            max_tasks_per_node=max_cores_per_node,
-            max_job_time_hours=max_job_time_hours
+        jobs_to_run = (
+            [self.NEWAVE_JOB_PATH, self.NEWAVE_POST_JOB_PATH]
+            if not skip_model
+            else [self.NEWAVE_POST_JOB_PATH]
         )
-        if job_id:
-            follow_submitted_job(job_id, self.NEWAVE_JOB_TIMEOUT)
+        for job_file in jobs_to_run:
+            job_id = submit_job(
+                queue,
+                core_count,
+                job_file,
+                cpus_per_task=2,
+                max_tasks_per_node=max_cores_per_node,
+                max_job_time_hours=max_job_time_hours,
+            )
+            if job_id:
+                follow_submitted_job(job_id, self.NEWAVE_JOB_TIMEOUT)
 
     def generate_execution_status(self, job_id: str) -> str:
         self._log.info("Reading 'pmo.dat' file for generating status...")
@@ -970,7 +979,9 @@ class NEWAVE(AbstractModel):
         move(filename, RAW_OUTPUTS_FILE)
 
         extracted_files = (
-            extract_zip_content(RAW_OUTPUTS_FILE) if isfile(RAW_OUTPUTS_FILE) else []
+            extract_zip_content(RAW_OUTPUTS_FILE)
+            if isfile(RAW_OUTPUTS_FILE)
+            else []
         )
         self._log.info(f"Extracted output files: {extracted_files}")
 

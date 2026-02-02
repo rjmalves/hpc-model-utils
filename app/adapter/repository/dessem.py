@@ -251,14 +251,16 @@ class DESSEM(AbstractModel):
                     parent_bucket, remote_filepath, self._log
                 )
             )
-            if any([
-                k not in parent_metadata
-                for k in [
-                    METADATA_MODEL_NAME,
-                    METADATA_STATUS,
-                    METADATA_STUDY_STARTING_DATE,
+            if any(
+                [
+                    k not in parent_metadata
+                    for k in [
+                        METADATA_MODEL_NAME,
+                        METADATA_STATUS,
+                        METADATA_STUDY_STARTING_DATE,
+                    ]
                 ]
-            ]):
+            ):
                 raise ValueError(
                     f"Parent metadata is incomplete [{parent_metadata}]"
                 )
@@ -383,10 +385,12 @@ class DESSEM(AbstractModel):
         dessem_arq.write(self.MODEL_ENTRY_FILE)
 
     def _evaluate_data_error(self, des_log_relato: DesLogRelato) -> bool:
-        return any([
-            self.DATA_ERROR_PATTERN in b.data
-            for b in des_log_relato.data.of_type(DefaultBlock)
-        ])
+        return any(
+            [
+                self.DATA_ERROR_PATTERN in b.data
+                for b in des_log_relato.data.of_type(DefaultBlock)
+            ]
+        )
 
     # TODO - aguardando suporte do arquivo LOG_INVIAB na idessem (até a idessem 0.0.23 não possui)
     # def _evaluate_feasibility(self, log_inviab: LogInviab) -> bool:
@@ -742,7 +746,6 @@ class DESSEM(AbstractModel):
 
     def cancel_run(self, job_id: str, slurm_path: str):
         raise NotImplementedError
-
 
     def download_executed_run(self, outputs_path: str, delete: bool = True):
         raise NotImplementedError
