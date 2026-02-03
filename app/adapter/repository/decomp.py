@@ -402,23 +402,32 @@ class DECOMP(AbstractModel):
         f"Overwriting study name: {execution_name}"
         dadger.te.titulo = execution_name
         if isfile(self.CUT_HEADER_FILE):
-            dadger.fc(tipo="NEWV21").caminho = self.CUT_HEADER_FILE
-            self._log.info(
-                f"Overwriting cut header path: {self.CUT_HEADER_FILE}"
-            )
-            cut_by_stage_files = [f for f in listdir() if "cortes-" in f]
-            if len(cut_by_stage_files) > 0:
-                cut_file = cut_by_stage_files[0]
+            registro_fc = dadger.fc(tipo="NEWV21")
+            if registro_fc is None:
+                self._log.info(f"A {self.CUT_HEADER_FILE} file was found," + 
+                               " but not a FC register")
+                # Delete unused cut files
+                cut_by_stage_files = [f for f in listdir() if "cortes-" in f]
+                all_cut_files = cut_by_stage_files + [self.CUT_HEADER_FILE, self.CUT_FULL_FILE]
+                self._log.info(f"Deleting unused cut files: {all_cut_files}")
+                clean_files(all_cut_files)
             else:
-                cut_file = self.CUT_FULL_FILE
-            dadger.fc(tipo="NEWCUT").caminho = cut_file
-            self._log.info(f"Overwriting cut path: {cut_file}")
-            # Delete unused cut files
-            all_cut_files = cut_by_stage_files + [self.CUT_FULL_FILE]
-            files_to_delete = [f for f in all_cut_files if f != cut_file]
-            self._log.info(f"Deleting unused cut files: {files_to_delete}")
-            clean_files(files_to_delete)
-
+                dadger.fc(tipo="NEWV21").caminho = self.CUT_HEADER_FILE
+                self._log.info(
+                    f"Overwriting cut header path: {self.CUT_HEADER_FILE}"
+                )
+                cut_by_stage_files = [f for f in listdir() if "cortes-" in f]
+                if len(cut_by_stage_files) > 0:
+                    cut_file = cut_by_stage_files[0]
+                else:
+                    cut_file = self.CUT_FULL_FILE
+                dadger.fc(tipo="NEWCUT").caminho = cut_file
+                self._log.info(f"Overwriting cut path: {cut_file}")
+                # Delete unused cut files
+                all_cut_files = cut_by_stage_files + [self.CUT_FULL_FILE]
+                files_to_delete = [f for f in all_cut_files if f != cut_file]
+                self._log.info(f"Deleting unused cut files: {files_to_delete}")
+                clean_files(files_to_delete)
         dadger.write(self.arquivos_dat.dadger)
 
     def _evaluate_data_error(self, relato: Relato) -> bool:
