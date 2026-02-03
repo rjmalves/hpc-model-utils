@@ -505,30 +505,35 @@ class DECOMP(AbstractModel):
                 follow_submitted_job(job_id, self.DECOMP_JOB_TIMEOUT)
 
     def generate_execution_status(self, job_id: str) -> str:
-        self._log.info("Reading 'dadger' file for generating status...")
-        dadger = self.dadger
-        self._log.info("Reading 'relato' file for generating status...")
-        relato = self.relato
-        self._log.info(
-            "Reading 'inviab_unic' or 'inviab' file for generating status..."
-        )
-        inviab_unic = self.inviab_unic
-        inviab = self.inviab
+        try:
+            self._log.info("Reading 'dadger' file for generating status...")
+            dadger = self.dadger
+            self._log.info("Reading 'relato' file for generating status...")
+            relato = self.relato
+            self._log.info(
+                "Reading 'inviab_unic' or 'inviab' file for generating status..."
+            )
+            inviab_unic = self.inviab_unic
+            inviab = self.inviab
 
-        status = RunStatus.SUCCESS
+            status = RunStatus.SUCCESS
 
-        if self._evaluate_data_error(relato):
-            status = RunStatus.DATA_ERROR
-        elif self._evaluate_max_iterations(relato):
-            status = RunStatus.RUNTIME_ERROR
-        elif self._evaluate_feasibility(inviab_unic, dadger) or (
-            self._evaluate_feasibility(inviab, dadger)
-        ):
-            status = RunStatus.INFEASIBLE
-        elif self._evaluate_negative_gap(relato):
-            status = RunStatus.RUNTIME_ERROR
-        elif self._evaluate_relato_outputs(relato):
-            status = RunStatus.DATA_ERROR
+            if self._evaluate_data_error(relato):
+                status = RunStatus.DATA_ERROR
+            elif self._evaluate_max_iterations(relato):
+                status = RunStatus.RUNTIME_ERROR
+            elif self._evaluate_feasibility(inviab_unic, dadger) or (
+                self._evaluate_feasibility(inviab, dadger)
+            ):
+                status = RunStatus.INFEASIBLE
+            elif self._evaluate_negative_gap(relato):
+                status = RunStatus.RUNTIME_ERROR
+            elif self._evaluate_relato_outputs(relato):
+                status = RunStatus.DATA_ERROR
+
+        except Exception as e:
+            self._log.error(f"Error generating execution status: {e}")
+            status = RunStatus.UNKNOWN
 
         status_value = status.value
         with open(STATUS_DIAGNOSIS_FILE, "w") as f:
