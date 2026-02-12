@@ -68,11 +68,11 @@ def follow_submitted_job(job_id: str, timeout: float):
         [
             f"while squeue | grep {job_id} > /dev/null ;do",
             "if [ -e stdout.modelops ];",
-            "then tail -n 25 stdout.modelops;",
+            "then tail -n 100 stdout.modelops;",
             f"else squeue -a -j {job_id};  fi; sleep 5; done 2>&1",
         ],
         timeout=timeout,
-        last_lines_diff=50,
+        last_lines_diff=100,
         log_output=True,
     )
     if status_code != 0:
