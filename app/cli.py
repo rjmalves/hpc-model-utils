@@ -287,9 +287,9 @@ def download_executed_run(model_name, artifacts_path, fetch_inputs):
 cli.add_command(download_executed_run)
 
 
-@click.command("extract_outputs")
+@click.command("fetch_extract_raw_outputs")
 @click.argument("outputs_path", type=str)
-def extract_outputs(outputs_path):
+def fetch_extract_raw_outputs(outputs_path):
     """
     Downloads and extracts a user-provided outputs zip from S3
     into the current working directory.
@@ -311,4 +311,4 @@ def extract_outputs(outputs_path):
         logger.exception(str(e))
 
 
-cli.add_command(extract_outputs)
+cli.add_command(fetch_extract_raw_outputs)
