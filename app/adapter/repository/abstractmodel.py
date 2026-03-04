@@ -86,7 +86,7 @@ class AbstractModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def download_executed_run(self, outputs_path: str, delete: bool = True):
+    def download_executed_run(self, artifacts_path: str, fetch_inputs: bool):
         raise NotImplementedError
 
 

@@ -874,8 +874,34 @@ class DECOMP(AbstractModel):
             cancel_submitted_job(job_id)
             wait_cancelled_job(job_id, JOB_CANCELLATION_TIMEOUT)
 
-    def download_executed_run(self, outputs_path: str, delete: bool = True):
-        raise NotImplementedError
+    def download_executed_run(self, artifacts_path: str, fetch_inputs: bool = True):
+        self._log.info(f"Fetching artifact data in {artifacts_path}...")
+
+        if fetch_inputs:
+            inputs_path = join(artifacts_path, INPUTS_ECHO_PREFIX)
+            inputs_path_data = path_to_bucket_and_key(inputs_path)
+            bucket = inputs_path_data["bucket"]
+            key = inputs_path_data["key"]
+            downloaded_filepaths = check_and_download_bucket_items(
+                bucket, str(Path(curdir).resolve()), key, self._log
+            )
+            for filepath in downloaded_filepaths:
+                self._log.info(
+                    f"Downloaded {filepath}"
+                )
+
+        outputs_path = join(artifacts_path, OUTPUTS_PREFIX)
+        outputs_path_data = path_to_bucket_and_key(outputs_path)
+        bucket = outputs_path_data["bucket"]
+        key = outputs_path_data["key"]
+        downloaded_filepaths = check_and_download_bucket_items(
+            bucket, str(Path(curdir).resolve()), key, self._log
+        )
+        for filepath in downloaded_filepaths:
+            self._log.info(
+                f"Downloaded {filepath}"
+            )
+
 
 
 ModelFactory().register(DECOMP.MODEL_NAME, DECOMP)

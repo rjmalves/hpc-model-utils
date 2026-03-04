@@ -959,31 +959,33 @@ class NEWAVE(AbstractModel):
             cancel_submitted_job(job_id)
             wait_cancelled_job(job_id, JOB_CANCELLATION_TIMEOUT)
 
-    def download_executed_run(self, outputs_path: str, delete: bool = True):
-        self._log.info(f"Fetching output data in {outputs_path}...")
+    def download_executed_run(self, artifacts_path: str, fetch_inputs: bool = True):
+        self._log.info(f"Fetching artifact data in {artifacts_path}...")
 
-        path_data = path_to_bucket_and_key(outputs_path)
-        bucket = path_data["bucket"]
-        key = path_data["key"]
-        filename = key.split("/")[-1]
+        if fetch_inputs:
+            inputs_path = join(artifacts_path, INPUTS_ECHO_PREFIX)
+            inputs_path_data = path_to_bucket_and_key(inputs_path)
+            bucket = inputs_path_data["bucket"]
+            key = inputs_path_data["key"]
+            downloaded_filepaths = check_and_download_bucket_items(
+                bucket, str(Path(curdir).resolve()), key, self._log
+            )
+            for filepath in downloaded_filepaths:
+                self._log.info(
+                    f"Downloaded {filepath}"
+                )
 
-        check_and_download_bucket_items(
+        outputs_path = join(artifacts_path, OUTPUTS_PREFIX)
+        outputs_path_data = path_to_bucket_and_key(outputs_path)
+        bucket = outputs_path_data["bucket"]
+        key = outputs_path_data["key"]
+        downloaded_filepaths = check_and_download_bucket_items(
             bucket, str(Path(curdir).resolve()), key, self._log
         )
-
-        if delete:
-            self._log.info(f"Removing inputs from {outputs_path}...")
-            check_and_delete_bucket_item(bucket, filename, key, self._log)
-
-        self._log.info(f"Renaming input file to {RAW_OUTPUTS_FILE}")
-        move(filename, RAW_OUTPUTS_FILE)
-
-        extracted_files = (
-            extract_zip_content(RAW_OUTPUTS_FILE)
-            if isfile(RAW_OUTPUTS_FILE)
-            else []
-        )
-        self._log.info(f"Extracted output files: {extracted_files}")
+        for filepath in downloaded_filepaths:
+            self._log.info(
+                f"Downloaded {filepath}"
+            )
 
 
 ModelFactory().register(NEWAVE.MODEL_NAME, NEWAVE)
