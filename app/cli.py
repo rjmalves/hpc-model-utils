@@ -1,9 +1,13 @@
+import os
+
 import click
 
 from app.adapter.repository.abstractmodel import ModelFactory
 from app.utils.commands import ModelOpsCommands
-from app.utils.constants import MPICH_PATH, SLURM_PATH
+from app.utils.constants import MPICH_PATH, RAW_OUTPUTS_FILE, SLURM_PATH
+from app.utils.fs import extract_zip_content
 from app.utils.log import Log
+from app.utils.s3 import check_and_download_bucket_items, path_to_bucket_and_key
 
 
 @click.group()
@@ -281,3 +285,30 @@ def download_executed_run(model_name, artifacts_path, fetch_inputs):
 
 
 cli.add_command(download_executed_run)
+
+
+@click.command("extract_outputs")
+@click.argument("outputs_path", type=str)
+def extract_outputs(outputs_path):
+    """
+    Downloads and extracts a user-provided outputs zip from S3
+    into the current working directory.
+    """
+    logger = Log.configure_logger()
+
+    try:
+        parsed = path_to_bucket_and_key(outputs_path)
+        downloaded = check_and_download_bucket_items(
+            parsed["bucket"], ".", parsed["key"], logger
+        )
+        downloaded_file = downloaded[0]
+        os.rename(downloaded_file, RAW_OUTPUTS_FILE)
+        extract_zip_content(RAW_OUTPUTS_FILE)
+        os.remove(RAW_OUTPUTS_FILE)
+        logger.info(f"Extracted outputs from: {outputs_path}")
+    except Exception as e:
+        ModelOpsCommands.set_model_error()
+        logger.exception(str(e))
+
+
+cli.add_command(extract_outputs)
