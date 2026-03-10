@@ -23,6 +23,9 @@ from app.errors import (
 from app.utils.scheduler import JobCompletionInfo
 
 
+# Helpers
+
+
 def _make_completion_info(**kwargs: str) -> JobCompletionInfo:
     defaults: dict[str, str] = {
         "job_id": "42",
@@ -37,11 +40,15 @@ def _make_completion_info(**kwargs: str) -> JobCompletionInfo:
 
 
 def _make_raising_command(exc: BaseException) -> None:
+
     @handle_cli_errors("test_cmd")
     def cmd() -> None:
         raise exc
 
     return cmd  # type: ignore[return-value]
+
+
+# No exception — happy path
 
 
 class TestNoException:
@@ -85,12 +92,11 @@ class TestNoException:
         assert received == {"a": 1, "b": "hello"}
 
 
-# ---------------------------------------------------------------------------
 # ValidationError
-# ---------------------------------------------------------------------------
 
 
 class TestValidationError:
+    def test_calls_set_model_error(self) -> None:
         cmd = _make_raising_command(ValidationError("bad input"))
 
         with (
@@ -172,9 +178,7 @@ class TestValidationError:
         mock_logger.exception.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # S3Error
-# ---------------------------------------------------------------------------
 
 
 class TestS3Error:
@@ -219,9 +223,7 @@ class TestS3Error:
         assert "bucket not found" in logged_msg
 
 
-# ---------------------------------------------------------------------------
 # SlurmError
-# ---------------------------------------------------------------------------
 
 
 class TestSlurmError:
@@ -316,9 +318,7 @@ class TestSlurmError:
         assert "1024K" in positional_values
 
 
-# ---------------------------------------------------------------------------
 # ModelExecutionError
-# ---------------------------------------------------------------------------
 
 
 class TestModelExecutionError:
@@ -363,9 +363,7 @@ class TestModelExecutionError:
         assert "model crashed" in logged_msg
 
 
-# ---------------------------------------------------------------------------
 # CLIError base (raised directly, not as a subclass)
-# ---------------------------------------------------------------------------
 
 
 class TestCLIErrorBase:
@@ -403,9 +401,7 @@ class TestCLIErrorBase:
         mock_exit.assert_called_once_with(EXIT_MODEL_ERROR)
 
 
-# ---------------------------------------------------------------------------
 # Unexpected Exception (RuntimeError, etc.)
-# ---------------------------------------------------------------------------
 
 
 class TestUnexpectedException:
@@ -475,9 +471,7 @@ class TestUnexpectedException:
         mock_exit.assert_called_once_with(EXIT_UNKNOWN_ERROR)
 
 
-# ---------------------------------------------------------------------------
 # Click exceptions — must propagate
-# ---------------------------------------------------------------------------
 
 
 class TestClickExceptionsPropagation:
@@ -534,9 +528,7 @@ class TestClickExceptionsPropagation:
                 cmd()
 
 
-# ---------------------------------------------------------------------------
 # Decorator metadata preservation (functools.wraps)
-# ---------------------------------------------------------------------------
 
 
 class TestDecoratorMetadata:
@@ -562,9 +554,7 @@ class TestDecoratorMetadata:
         assert hasattr(cmd, "__wrapped__")
 
 
-# ---------------------------------------------------------------------------
 # Logger retrieval
-# ---------------------------------------------------------------------------
 
 
 class TestLoggerRetrieval:
@@ -584,107 +574,3 @@ class TestLoggerRetrieval:
 
         mock_logging.getLogger.assert_called_once_with("hpc-model-utils")
 
-
-# ---------------------------------------------------------------------------
-# Annotation sending
-# ---------------------------------------------------------------------------
-
-
-class TestAnnotationSending:
-    def test_validation_error_sends_annotation_with_category_and_message(self) -> None:
-        cmd = _make_raising_command(ValidationError("bad input"))
-
-        with (
-            patch("app.error_handler.ModelOpsCommands") as mock_ops,
-            patch("sys.exit"),
-        ):
-            cmd()
-
-        mock_ops.set_annotation.assert_called_once()
-        annotation = mock_ops.set_annotation.call_args[0][0]
-        assert "[ValidationError]" in annotation
-        assert "bad input" in annotation
-
-    def test_s3_error_sends_annotation_with_category(self) -> None:
-        cmd = _make_raising_command(S3Error("bucket missing"))
-
-        with (
-            patch("app.error_handler.ModelOpsCommands") as mock_ops,
-            patch("sys.exit"),
-        ):
-            cmd()
-
-        mock_ops.set_annotation.assert_called_once()
-        annotation = mock_ops.set_annotation.call_args[0][0]
-        assert "[S3Error]" in annotation
-        assert "bucket missing" in annotation
-
-    def test_slurm_error_without_completion_info_sends_basic_annotation(self) -> None:
-        cmd = _make_raising_command(SlurmError("job failed"))
-
-        with (
-            patch("app.error_handler.ModelOpsCommands") as mock_ops,
-            patch("sys.exit"),
-        ):
-            cmd()
-
-        mock_ops.set_annotation.assert_called_once()
-        annotation = mock_ops.set_annotation.call_args[0][0]
-        assert "[SlurmError]" in annotation
-        assert "job failed" in annotation
-        assert "job_id=" not in annotation
-        assert "state=" not in annotation
-
-    def test_slurm_error_with_completion_info_sends_enriched_annotation(self) -> None:
-        info = _make_completion_info(job_id="42", state="FAILED")
-        err = SlurmError("job failed", completion_info=info)
-        cmd = _make_raising_command(err)
-
-        with (
-            patch("app.error_handler.ModelOpsCommands") as mock_ops,
-            patch("sys.exit"),
-        ):
-            cmd()
-
-        mock_ops.set_annotation.assert_called_once()
-        annotation = mock_ops.set_annotation.call_args[0][0]
-        assert "job_id=42" in annotation
-        assert "state=FAILED" in annotation
-
-    def test_unexpected_exception_sends_annotation(self) -> None:
-        cmd = _make_raising_command(RuntimeError("unexpected"))
-
-        with (
-            patch("app.error_handler.ModelOpsCommands") as mock_ops,
-            patch("sys.exit"),
-        ):
-            cmd()
-
-        mock_ops.set_annotation.assert_called_once()
-        annotation = mock_ops.set_annotation.call_args[0][0]
-        assert "[CLIError]" in annotation
-        assert "unexpected" in annotation
-
-    def test_annotation_failure_does_not_mask_original_error(self) -> None:
-        cmd = _make_raising_command(ValidationError("bad input"))
-
-        with (
-            patch("app.error_handler.ModelOpsCommands") as mock_ops,
-            patch("sys.exit") as mock_exit,
-        ):
-            mock_ops.set_annotation.side_effect = OSError("io fail")
-            cmd()
-
-        mock_exit.assert_called_once_with(EXIT_VALIDATION_ERROR)
-
-    def test_click_exception_does_not_send_annotation(self) -> None:
-        cmd = _make_raising_command(click.BadParameter("invalid"))
-
-        with (
-            patch("app.error_handler.ModelOpsCommands") as mock_ops,
-            patch("sys.exit"),
-        ):
-            with pytest.raises(click.BadParameter):
-                cmd()
-
-        mock_ops.set_annotation.assert_not_called()

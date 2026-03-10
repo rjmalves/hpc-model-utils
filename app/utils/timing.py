@@ -3,7 +3,7 @@ import logging
 import time
 from collections.abc import Callable
 from logging import INFO, Logger
-from typing import Any, Optional
+from typing import Any
 
 from app.utils.commands import ModelOpsCommands
 
@@ -11,8 +11,8 @@ from app.utils.commands import ModelOpsCommands
 class time_and_log:
     def __init__(
         self,
-        message_root: Optional[str] = None,
-        logger: Optional[Logger] = None,
+        message_root: str | None = None,
+        logger: Logger | None = None,
         level: int = INFO,
     ) -> None:
         self.message_root = message_root

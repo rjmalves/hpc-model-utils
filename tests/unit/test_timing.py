@@ -10,27 +10,21 @@ import pytest
 from app.utils.timing import time_and_log, time_command
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _noop() -> None:
-    """No-op function used as a decorated target."""
+    pass
 
 
 def _make_raising_command(exit_code: int):
-    """Return a function that raises SystemExit with the given code."""
-
     def _raising() -> None:
         raise SystemExit(exit_code)
 
     return _raising
 
 
-# ---------------------------------------------------------------------------
 # TestTimeCommand
-# ---------------------------------------------------------------------------
 
 
 class TestTimeCommand:
@@ -140,9 +134,7 @@ class TestTimeCommand:
         assert received == [(1, 2, True)]
 
 
-# ---------------------------------------------------------------------------
 # TestExistingTimeAndLog (regression)
-# ---------------------------------------------------------------------------
 
 
 class TestExistingTimeAndLog:
@@ -161,3 +153,4 @@ class TestExistingTimeAndLog:
         assert re.search(r"\d+\.\d{2} s", logged_message), (
             f"Expected elapsed-time pattern in: {logged_message!r}"
         )
+
