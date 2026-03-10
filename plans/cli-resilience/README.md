@@ -15,8 +15,8 @@ Improve error handling and resilience in the `hpc-model-utils` CLI application b
 | ---- | ----------------- | ------- | ------------ | --------- |
 | 01   | Input Validation  | 4       | Detailed     | Completed |
 | 02   | SLURM Monitoring  | 3       | Detailed     | Completed |
-| 03   | Structured Errors | 3       | Refined      | Executing |
-| 04   | Test Coverage     | 3       | Outline      | Outline   |
+| 03   | Structured Errors | 3       | Refined      | Completed |
+| 04   | Test Coverage     | 3       | Refined      | Executing |
 | 05   | Observability     | 2       | Outline      | Outline   |
 
 ## Progress Tracking
@@ -33,8 +33,8 @@ Improve error handling and resilience in the `hpc-model-utils` CLI application b
 | ticket-008 | Define error hierarchy and exit code mapping                  | epic-03 | completed | Refined      | 1.00      | 0.93    | EXCELLENT  |
 | ticket-009 | Create centralized CLI error handler decorator                | epic-03 | completed | Refined      | 1.00      | 0.73    | BELOW GATE |
 | ticket-010 | Replace try/except Exception in all CLI commands              | epic-03 | completed | Refined      | 1.00      | 0.88    | ACCEPTABLE |
-| ticket-011 | Add unit tests for validation primitives and validators       | epic-04 | pending   | Outline      | --        | --      | --         |
-| ticket-012 | Add unit tests for SLURM monitoring functions                 | epic-04 | pending   | Outline      | --        | --      | --         |
-| ticket-013 | Add CLI integration tests for error handling and exit codes   | epic-04 | pending   | Outline      | --        | --      | --         |
+| ticket-011 | Add unit tests for validation primitives and Click types      | epic-04 | completed | Refined      | 1.00      | 0.93    | EXCELLENT  |
+| ticket-012 | Add unit tests for SLURM monitoring functions                 | epic-04 | completed | Refined      | 1.00      | 0.93    | EXCELLENT  |
+| ticket-013 | Add CLI integration tests for error handling and exit codes   | epic-04 | completed | Refined      | 1.00      | 0.93    | EXCELLENT  |
 | ticket-014 | Add structured error annotations to ModelOps signaling        | epic-05 | pending   | Outline      | --        | --      | --         |
 | ticket-015 | Add command timing and diagnostic output                      | epic-05 | pending   | Outline      | --        | --      | --         |

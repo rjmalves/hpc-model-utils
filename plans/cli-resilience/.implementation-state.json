@@ -1,6 +1,6 @@
 {
   "plan": "cli-resilience",
-  "last_updated": "2026-03-10T16:48:48Z",
+  "last_updated": "2026-03-10T17:18:50Z",
   "progressive": true,
   "tickets": {
     "ticket-001-create-validation-primitives.md": {
@@ -244,16 +244,76 @@
       "agent": "python-task-automation-developer"
     },
     "ticket-011-test-validation-primitives.md": {
-      "status": "pending",
-      "detail_level": "outline"
+      "status": "completed",
+      "detail_level": "refined",
+      "scores": {
+        "quality": 0.93,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 1.0,
+          "lint_cleanliness": 1.0,
+          "type_safety": 0.5,
+          "test_delta": 1.0
+        },
+        "readiness": 1.0,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 1.0,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "monorepo-test-developer"
     },
     "ticket-012-test-slurm-monitoring.md": {
-      "status": "pending",
-      "detail_level": "outline"
+      "status": "completed",
+      "detail_level": "refined",
+      "scores": {
+        "quality": 0.925,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 1.0,
+          "lint_cleanliness": 1.0,
+          "type_safety": 0.5,
+          "test_delta": 1.0
+        },
+        "readiness": 1.0,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 1.0,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "monorepo-test-developer"
     },
     "ticket-013-cli-integration-tests.md": {
-      "status": "pending",
-      "detail_level": "outline"
+      "status": "completed",
+      "detail_level": "refined",
+      "scores": {
+        "quality": 0.925,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 1.0,
+          "lint_cleanliness": 1.0,
+          "type_safety": 0.5,
+          "test_delta": 1.0
+        },
+        "readiness": 1.0,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 1.0,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "monorepo-test-developer"
     },
     "ticket-014-structured-error-annotations.md": {
       "status": "pending",
@@ -278,7 +338,7 @@
       "learning_extracted": true
     },
     "epic-04-test-coverage": {
-      "phase": "outline",
+      "phase": "executing",
       "learning_extracted": false
     },
     "epic-05-observability": {
