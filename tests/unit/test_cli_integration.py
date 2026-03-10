@@ -3,47 +3,17 @@
 These tests exercise the full pipeline from argument parsing through the error
 handler to the final exit code, verifying that Click types, per-command
 validators, _get_model_with_logger, and handle_cli_errors cooperate correctly.
-
-sys.modules stubs are installed before any app.* import so that optional model
-adapter dependencies (pandas, inewave, idecomp, etc.) do not need to be present
-in the unit-test environment.
 """
 
 from __future__ import annotations
 
-import sys
 from unittest.mock import MagicMock
 
-_STUB_MODULES = [
-    "pandas",
-    "pytz",
-    "inewave",
-    "inewave.newave",
-    "idecomp",
-    "idecomp.decomp",
-    "idessem",
-    "boto3",
-    "botocore",
-    "cfinterface",
-    "cfinterface.components",
-    "cfinterface.components.defaultblock",
-]
+import pytest
+from click.testing import CliRunner
 
-for _mod_name in _STUB_MODULES:
-    if _mod_name not in sys.modules:
-        sys.modules[_mod_name] = MagicMock()
-
-sys.modules["inewave"].newave = sys.modules["inewave.newave"]
-sys.modules["cfinterface"].components = sys.modules["cfinterface.components"]
-sys.modules["cfinterface.components"].defaultblock = sys.modules[
-    "cfinterface.components.defaultblock"
-]
-
-import pytest  # noqa: E402
-from click.testing import CliRunner  # noqa: E402
-
-from app.adapter.repository.abstractmodel import ModelFactory  # noqa: E402
-from app.cli import cli  # noqa: E402
+from app.adapter.repository.abstractmodel import ModelFactory
+from app.cli import cli
 
 FAKE_MODEL = "integration_test_model_abc123"
 VALID_S3 = "s3://my-bucket/some/key"
