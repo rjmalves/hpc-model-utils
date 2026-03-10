@@ -151,19 +151,19 @@ class TestValidateRun:
             validate_run(FAKE_MODEL, "", 64, None, None)
 
     def test_invalid_core_count_zero(self):
-        with pytest.raises(click.BadParameter, match="core_count"):
+        with pytest.raises(click.BadParameter, match="positive integer"):
             validate_run(FAKE_MODEL, "normal", 0, None, None)
 
     def test_invalid_core_count_negative(self):
-        with pytest.raises(click.BadParameter, match="core_count"):
+        with pytest.raises(click.BadParameter, match="positive integer"):
             validate_run(FAKE_MODEL, "normal", -1, None, None)
 
     def test_invalid_max_cores_per_node_zero(self):
-        with pytest.raises(click.BadParameter, match="max-cores-per-node"):
+        with pytest.raises(click.BadParameter, match="positive integer"):
             validate_run(FAKE_MODEL, "normal", 64, 0, None)
 
     def test_invalid_max_job_time_hours_negative(self):
-        with pytest.raises(click.BadParameter, match="max-job-time-hours"):
+        with pytest.raises(click.BadParameter, match="positive integer"):
             validate_run(FAKE_MODEL, "normal", 64, None, -5)
 
 
@@ -211,11 +211,11 @@ class TestValidateOutputCompressionAndCleanup:
             validate_output_compression_and_cleanup("unknown_model", 4)
 
     def test_invalid_num_cpus_zero(self):
-        with pytest.raises(click.BadParameter, match="num_cpus"):
+        with pytest.raises(click.BadParameter, match="positive integer"):
             validate_output_compression_and_cleanup(FAKE_MODEL, 0)
 
     def test_invalid_num_cpus_negative(self):
-        with pytest.raises(click.BadParameter, match="num_cpus"):
+        with pytest.raises(click.BadParameter, match="positive integer"):
             validate_output_compression_and_cleanup(FAKE_MODEL, -1)
 
 
