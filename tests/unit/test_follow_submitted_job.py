@@ -2,12 +2,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.utils.constants import SLURM_SUBMISSION_REGEX_PATTERN
 from app.utils.scheduler import (
     JobCompletionInfo,
     JobOutputFiles,
+    cancel_submitted_job,
     follow_submitted_job,
     get_job_completion_info,
     read_job_output_files,
+    submit_job,
+    wait_cancelled_job,
 )
 
 _JOB_ID = "12345"
@@ -42,7 +46,6 @@ _OUTPUT_BOTH = JobOutputFiles(
 
 class TestReadJobOutputFiles:
     def test_both_files_exist_returns_content(self, tmp_path, monkeypatch):
-        """Both files present: content is returned and exists flags are True."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / "stdout.modelops").write_text("Model converged successfully\n")
         (tmp_path / "stderr.modelops").write_text("Warning: deprecated config\n")
@@ -55,7 +58,6 @@ class TestReadJobOutputFiles:
         assert result.stderr_content == "Warning: deprecated config\n"
 
     def test_only_stdout_exists(self, tmp_path, monkeypatch):
-        """Only stdout present: stderr_content is None and stderr_exists is False."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / "stdout.modelops").write_text("output\n")
 
@@ -67,7 +69,6 @@ class TestReadJobOutputFiles:
         assert result.stderr_content is None
 
     def test_neither_file_exists(self, tmp_path, monkeypatch):
-        """Neither file present: both content fields are None, both exists flags False."""
         monkeypatch.chdir(tmp_path)
 
         result = read_job_output_files()
@@ -78,7 +79,6 @@ class TestReadJobOutputFiles:
         assert result.stderr_content is None
 
     def test_large_stdout_truncated_to_10000_lines(self, tmp_path, monkeypatch):
-        """A file with 50000 lines returns only the last 10000 lines."""
         monkeypatch.chdir(tmp_path)
         total_lines = 50_000
         lines = [f"line {i}\n" for i in range(total_lines)]
@@ -90,13 +90,10 @@ class TestReadJobOutputFiles:
         assert result.stdout_content is not None
         returned_lines = result.stdout_content.splitlines()
         assert len(returned_lines) == 10_000
-        # Last line must be from the end of the file
         assert returned_lines[-1] == f"line {total_lines - 1}"
-        # First line in the result must not be "line 0"
         assert returned_lines[0] == f"line {total_lines - 10_000}"
 
     def test_non_utf8_bytes_handled_with_replace(self, tmp_path, monkeypatch):
-        """Files with invalid UTF-8 bytes are read without raising (errors='replace')."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / "stdout.modelops").write_bytes(b"valid text\xff\xfe invalid bytes\n")
 
@@ -104,11 +101,9 @@ class TestReadJobOutputFiles:
 
         assert result.stdout_exists is True
         assert result.stdout_content is not None
-        # Replacement character inserted, no exception raised
         assert "valid text" in result.stdout_content
 
     def test_custom_filenames_accepted(self, tmp_path, monkeypatch):
-        """Custom stdout_file and stderr_file parameters are used."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / "custom_out.log").write_text("custom stdout\n")
         (tmp_path / "custom_err.log").write_text("custom stderr\n")
@@ -122,7 +117,6 @@ class TestReadJobOutputFiles:
         assert result.stderr_content == "custom stderr\n"
 
     def test_permission_error_yields_none_content_exists_true(self, tmp_path, monkeypatch):
-        """A file that exists but cannot be read sets content=None without raising."""
         monkeypatch.chdir(tmp_path)
         stdout_path = tmp_path / "stdout.modelops"
         stdout_path.write_text("data\n")
@@ -139,20 +133,18 @@ class TestReadJobOutputFiles:
         with patch("builtins.open", side_effect=patched_open):
             result = read_job_output_files()
 
-        # File exists (Path.exists() succeeds) but open() raises
         assert result.stdout_exists is True
         assert result.stdout_content is None
 
 
 class TestFastJob:
     def test_stdout_read_after_instant_completion(self, capsys):
-        """Job exits before first squeue check; post-completion output is logged."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
                 side_effect=[
-                    _SQUEUE_EMPTY,       # _job_in_queue → False, loop skipped
-                    _SACCT_COMPLETED,    # get_job_completion_info sacct call
+                    _SQUEUE_EMPTY,
+                    _SACCT_COMPLETED,
                 ],
             ) as mock_rit,
             patch(
@@ -164,15 +156,12 @@ class TestFastJob:
             result = follow_submitted_job(_JOB_ID, timeout=60)
 
         assert result is None
-        # sleep must NOT be called (loop never entered)
         mock_sleep.assert_not_called()
-        # Two run_in_terminal calls: squeue check + sacct (no cat)
         assert mock_rit.call_count == 2
         captured = capsys.readouterr()
         assert "stdout.modelops" in captured.out
 
     def test_no_sleep_before_first_squeue_check(self):
-        """Verifies sleep is not called before _job_in_queue returns False."""
         call_order: list[str] = []
 
         def fake_rit(cmds, **kwargs):
@@ -192,17 +181,12 @@ class TestFastJob:
         ):
             follow_submitted_job(_JOB_ID, timeout=60)
 
-        # The first event must be run_in_terminal (the squeue check), never sleep
         assert call_order[0] == "run_in_terminal"
         assert "sleep" not in call_order
 
 
 class TestNormalJob:
     def test_stdout_tailed_each_iteration(self):
-        """For a 3-iteration job, tail must be called 3 times inside the loop."""
-        # squeue: running x3, done
-        # tail: called 3 times inside the loop
-        # sacct: called once after loop exits (no cat call; read_job_output_files patched)
         squeue_responses = [
             _SQUEUE_RUNNING,
             _SQUEUE_RUNNING,
@@ -237,13 +221,9 @@ class TestNormalJob:
             result = follow_submitted_job(_JOB_ID, timeout=3600)
 
         assert result is None
-        # 4 squeue checks + 3 tail calls + 1 sacct = 8 total (no cat)
         assert mock_rit.call_count == 8
 
     def test_sleep_called_with_poll_interval(self):
-        """sleep(2.0) must be called once per completed loop iteration."""
-        # _tail_stdout is not triggered (os.path.exists not patched → file absent),
-        # so run_in_terminal receives only: squeue_running, squeue_empty, sacct.
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -267,7 +247,6 @@ class TestNormalJob:
 
 class TestMissingStdout:
     def test_warning_logged_no_exception_raised(self):
-        """If stdout.modelops does not exist after completion, warn but not raise."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -284,7 +263,6 @@ class TestMissingStdout:
         assert result is None
 
     def test_warning_printed_when_no_logger(self, capsys):
-        """Without a logger, the warning is sent to stdout via print()."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -302,7 +280,6 @@ class TestMissingStdout:
         assert "stdout.modelops" in captured.out
 
     def test_warning_sent_to_logger_when_provided(self):
-        """With a logger, the warning goes through logger.info(), not print()."""
         mock_logger = MagicMock()
 
         with (
@@ -326,8 +303,6 @@ class TestMissingStdout:
 
 class TestTimeout:
     def test_runtime_error_raised_on_timeout(self):
-        """RuntimeError must be raised when elapsed time exceeds timeout."""
-        # squeue always returns running; time() returns values that exceed timeout
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -338,7 +313,6 @@ class TestTimeout:
             ),
             patch("app.utils.scheduler.os.path.exists", return_value=True),
             patch("app.utils.scheduler.sleep"),
-            # start_time=0, then elapsed=999 (> timeout=10)
             patch(
                 "app.utils.scheduler.time",
                 side_effect=[0.0, 999.0],
@@ -348,7 +322,6 @@ class TestTimeout:
                 follow_submitted_job(_JOB_ID, timeout=10)
 
     def test_timeout_error_mentions_job_id(self):
-        """The RuntimeError message must include the job_id for traceability."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -367,7 +340,6 @@ class TestTimeout:
 
 class TestSqueueFailure:
     def test_runtime_error_raised_on_squeue_non_zero(self):
-        """If squeue returns a non-zero exit code, RuntimeError must be raised."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -379,7 +351,6 @@ class TestSqueueFailure:
                 follow_submitted_job(_JOB_ID, timeout=60)
 
     def test_runtime_error_raised_on_squeue_none_code(self):
-        """If squeue returns None exit code, RuntimeError must be raised."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -393,7 +364,6 @@ class TestSqueueFailure:
 
 class TestBackwardCompatibility:
     def test_called_without_logger_behaves_same_as_logger_none(self):
-        """Calling follow_submitted_job(job_id, timeout) without logger must work."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -404,7 +374,6 @@ class TestBackwardCompatibility:
                 return_value=_OUTPUT_STDOUT_ONLY,
             ),
         ):
-            # Must not raise TypeError about missing argument
             result = follow_submitted_job(_JOB_ID, 60)
 
         assert result is None
@@ -412,7 +381,6 @@ class TestBackwardCompatibility:
 
 class TestGetJobCompletionInfo:
     def test_returns_job_completion_info_on_valid_output(self):
-        """Valid sacct output parses to a fully-populated JobCompletionInfo."""
         with patch(
             "app.utils.scheduler.run_in_terminal",
             return_value=(0, [f"{_JOB_ID}|COMPLETED|0:0|00:05:23|4096K"]),
@@ -428,7 +396,6 @@ class TestGetJobCompletionInfo:
         assert result.raw_output == f"{_JOB_ID}|COMPLETED|0:0|00:05:23|4096K"
 
     def test_returns_none_on_non_zero_exit_code(self):
-        """sacct returning a non-zero exit code yields None."""
         with patch(
             "app.utils.scheduler.run_in_terminal",
             return_value=_SACCT_ERROR,
@@ -438,7 +405,6 @@ class TestGetJobCompletionInfo:
         assert result is None
 
     def test_returns_none_on_none_exit_code(self):
-        """sacct returning None exit code (timeout) yields None."""
         with patch(
             "app.utils.scheduler.run_in_terminal",
             return_value=_SACCT_NONE,
@@ -448,10 +414,9 @@ class TestGetJobCompletionInfo:
         assert result is None
 
     def test_returns_unknown_state_on_unparseable_output(self):
-        """When sacct output cannot be parsed (too few fields), state is UNKNOWN."""
         with patch(
             "app.utils.scheduler.run_in_terminal",
-            return_value=(0, [f"{_JOB_ID}|COMPLETED"]),  # only 2 fields instead of 5
+            return_value=(0, [f"{_JOB_ID}|COMPLETED"]),
         ):
             result = get_job_completion_info(_JOB_ID)
 
@@ -460,7 +425,6 @@ class TestGetJobCompletionInfo:
         assert result.raw_output == f"{_JOB_ID}|COMPLETED"
 
     def test_filters_batch_suffix_lines(self):
-        """sacct output with base job + .batch line uses only the base line."""
         batch_line = f"{_JOB_ID}.batch|COMPLETED|0:0|00:05:23|2048K"
         base_line = f"{_JOB_ID}|COMPLETED|0:0|00:05:23|4096K"
         with patch(
@@ -474,7 +438,6 @@ class TestGetJobCompletionInfo:
         assert result.raw_output == base_line
 
     def test_batch_only_output_returns_none_when_no_base_line(self):
-        """If only .batch lines exist (no base job line), returns None."""
         batch_line = f"{_JOB_ID}.batch|COMPLETED|0:0|00:05:23|2048K"
         with patch(
             "app.utils.scheduler.run_in_terminal",
@@ -485,7 +448,6 @@ class TestGetJobCompletionInfo:
         assert result is None
 
     def test_returns_none_on_exception(self):
-        """Any unexpected exception from run_in_terminal yields None."""
         with patch(
             "app.utils.scheduler.run_in_terminal",
             side_effect=RuntimeError("connection refused"),
@@ -495,7 +457,6 @@ class TestGetJobCompletionInfo:
         assert result is None
 
     def test_returns_none_on_empty_output(self):
-        """Empty sacct output (no matching job line) yields None."""
         with patch(
             "app.utils.scheduler.run_in_terminal",
             return_value=(0, [""]),
@@ -507,7 +468,6 @@ class TestGetJobCompletionInfo:
 
 class TestFollowSubmittedJobSacctLogging:
     def test_completion_info_logged_after_loop_exit(self, capsys):
-        """After loop exits, sacct state is logged to stdout."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -528,7 +488,6 @@ class TestFollowSubmittedJobSacctLogging:
         assert _JOB_ID in captured.out
 
     def test_warning_logged_for_failed_state(self, capsys):
-        """When sacct reports FAILED, a WARNING line is logged."""
         sacct_failed = (0, [f"{_JOB_ID}|FAILED|1:0|00:01:05|1024K"])
         with (
             patch(
@@ -550,7 +509,6 @@ class TestFollowSubmittedJobSacctLogging:
         assert "FAILED" in captured.out
 
     def test_no_warning_logged_for_completed_state(self, capsys):
-        """When sacct reports COMPLETED, no WARNING line appears in sacct output."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -567,11 +525,9 @@ class TestFollowSubmittedJobSacctLogging:
             follow_submitted_job(_JOB_ID, timeout=60)
 
         captured = capsys.readouterr()
-        # sacct-driven WARNING must not appear; stdout logging has no WARNING prefix
         assert "WARNING: Job" not in captured.out
 
     def test_sacct_failure_does_not_propagate(self):
-        """If sacct fails, follow_submitted_job still returns None without raising."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -592,7 +548,6 @@ class TestFollowSubmittedJobSacctLogging:
 
 class TestFollowSubmittedJobStderrLogging:
     def test_stderr_lines_prefixed_with_stderr_label(self, capsys):
-        """When stderr.modelops is non-empty, log lines are prefixed with STDERR:."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -610,7 +565,6 @@ class TestFollowSubmittedJobStderrLogging:
         assert "Warning: deprecated config" in captured.out
 
     def test_no_stderr_label_when_stderr_absent(self, capsys):
-        """When stderr.modelops is absent, no STDERR: lines appear."""
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -625,3 +579,142 @@ class TestFollowSubmittedJobStderrLogging:
 
         captured = capsys.readouterr()
         assert "STDERR:" not in captured.out
+
+
+_SUBMIT_JOB_ID = "67890"
+_SBATCH_SUCCESS = (0, [f"Submitted batch job {_SUBMIT_JOB_ID}"])
+_SBATCH_NONZERO = (1, ["sbatch: error: Batch job submission failed"])
+_SBATCH_NO_MATCH = (0, ["Some unexpected output that does not match pattern"])
+_SCANCEL_SUCCESS = (0, [])
+_SCANCEL_FAILURE = (1, ["scancel: error: Kill job error on job id 12345: Invalid job id"])
+_SQUEUE_GREP_SUCCESS = (0, [])
+_SQUEUE_GREP_FAILURE = (1, ["timeout exceeded"])
+
+
+class TestSubmitJob:
+    def test_successful_submission_returns_job_id(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SBATCH_SUCCESS,
+        ):
+            result = submit_job("normal", 64, "run.sh")
+
+        assert result == _SUBMIT_JOB_ID
+
+    def test_nonzero_exit_returns_none(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SBATCH_NONZERO,
+        ):
+            result = submit_job("normal", 64, "run.sh")
+
+        assert result is None
+
+    def test_output_no_regex_match_returns_none(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SBATCH_NO_MATCH,
+        ):
+            result = submit_job("normal", 64, "run.sh")
+
+        assert result is None
+
+    def test_max_tasks_per_node_adds_flag_to_command(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SBATCH_SUCCESS,
+        ) as mock_rit:
+            submit_job("normal", 64, "run.sh", max_tasks_per_node=8)
+
+        call_args = mock_rit.call_args
+        command_list: list[str] = call_args[0][0]
+        assert any("--ntasks-per-node=8" in arg for arg in command_list)
+
+    def test_max_tasks_per_node_none_does_not_add_flag(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SBATCH_SUCCESS,
+        ) as mock_rit:
+            submit_job("normal", 64, "run.sh", max_tasks_per_node=None)
+
+        call_args = mock_rit.call_args
+        command_list: list[str] = call_args[0][0]
+        assert not any("--ntasks-per-node" in arg for arg in command_list)
+
+    def test_max_job_time_hours_48_formats_as_two_days(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SBATCH_SUCCESS,
+        ) as mock_rit:
+            submit_job("normal", 64, "run.sh", max_job_time_hours=48)
+
+        call_args = mock_rit.call_args
+        command_list: list[str] = call_args[0][0]
+        assert "--time=2-00:00:00" in command_list
+
+    def test_max_job_time_hours_none_does_not_add_time_flag(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SBATCH_SUCCESS,
+        ) as mock_rit:
+            submit_job("normal", 64, "run.sh", max_job_time_hours=None)
+
+        call_args = mock_rit.call_args
+        command_list: list[str] = call_args[0][0]
+        assert not any(arg.startswith("--time=") for arg in command_list)
+
+    def test_pattern_constant_matches_sbatch_output(self):
+        import re
+
+        output_line = "Submitted batch job 67890"
+        match = re.match(SLURM_SUBMISSION_REGEX_PATTERN, output_line)
+
+        assert match is not None
+        assert match.groups()[0] == "67890"
+
+
+class TestCancelSubmittedJob:
+    def test_successful_cancel_returns_true(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SCANCEL_SUCCESS,
+        ):
+            result = cancel_submitted_job(_JOB_ID)
+
+        assert result is True
+
+    def test_failed_cancel_returns_false(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SCANCEL_FAILURE,
+        ):
+            result = cancel_submitted_job(_JOB_ID)
+
+        assert result is False
+
+
+class TestWaitCancelledJob:
+    def test_successful_wait_returns_none(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SQUEUE_GREP_SUCCESS,
+        ):
+            result = wait_cancelled_job(_JOB_ID, timeout=60.0)
+
+        assert result is None
+
+    def test_nonzero_exit_raises_runtime_error(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SQUEUE_GREP_FAILURE,
+        ):
+            with pytest.raises(RuntimeError):
+                wait_cancelled_job(_JOB_ID, timeout=60.0)
+
+    def test_runtime_error_message_contains_status_code(self):
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=(1, ["timeout exceeded"]),
+        ):
+            with pytest.raises(RuntimeError, match="1"):
+                wait_cancelled_job(_JOB_ID, timeout=60.0)
