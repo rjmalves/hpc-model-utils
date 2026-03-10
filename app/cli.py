@@ -5,6 +5,7 @@ import click
 from app.adapter.repository.abstractmodel import ModelFactory
 from app.click_types import ModelNameType, PositiveIntType, S3PathType
 from app.error_handler import handle_cli_errors
+from app.utils.timing import time_command
 from app.errors import ValidationError
 from app.utils.constants import MPICH_PATH, RAW_OUTPUTS_FILE, SLURM_PATH
 from app.utils.fs import extract_zip_content
@@ -33,7 +34,6 @@ def cli():
 
 
 def _get_model_with_logger(model_name: str, command_name: str):
-    """Get model instance from factory, raising ValidationError if factory fails."""
     logger = Log.configure_logger()
     try:
         model_type = ModelFactory().factory(model_name, logger)
@@ -47,11 +47,11 @@ def _get_model_with_logger(model_name: str, command_name: str):
 @click.argument("path", type=S3PathType())
 @click.option("--parent-path", type=str, default="")
 @click.option("--delete", is_flag=True, default=False)
+@time_command("check_and_fetch_inputs")
 @handle_cli_errors("check_and_fetch_inputs")
 def check_and_fetch_inputs(model_name, path, parent_path, delete):
-    """Check and download input data from a given S3 bucket."""
     validate_check_and_fetch_inputs(model_name, path, parent_path)
-    model_type, logger = _get_model_with_logger(model_name, "check_and_fetch_inputs")
+    model_type, _ = _get_model_with_logger(model_name, "check_and_fetch_inputs")
     model_type.check_and_fetch_inputs(path, parent_path, delete=delete)
 
 
@@ -61,11 +61,11 @@ cli.add_command(check_and_fetch_inputs)
 @click.command("check_and_fetch_executables")
 @click.argument("model_name", type=ModelNameType())
 @click.argument("path", type=S3PathType())
+@time_command("check_and_fetch_executables")
 @handle_cli_errors("check_and_fetch_executables")
 def check_and_fetch_executables(model_name, path):
-    """Check and download model executables from a given S3 bucket."""
     validate_check_and_fetch_executables(model_name, path)
-    model_type, logger = _get_model_with_logger(model_name, "check_and_fetch_executables")
+    model_type, _ = _get_model_with_logger(model_name, "check_and_fetch_executables")
     model_type.check_and_fetch_executables(path)
 
 
@@ -74,11 +74,11 @@ cli.add_command(check_and_fetch_executables)
 
 @click.command("extract_sanitize_inputs")
 @click.argument("model_name", type=ModelNameType())
+@time_command("extract_sanitize_inputs")
 @handle_cli_errors("extract_sanitize_inputs")
 def extract_sanitize_inputs(model_name):
-    """Extract and sanitize compressed input files."""
     validate_extract_sanitize_inputs(model_name)
-    model_type, logger = _get_model_with_logger(model_name, "extract_sanitize_inputs")
+    model_type, _ = _get_model_with_logger(model_name, "extract_sanitize_inputs")
     model_type.extract_sanitize_inputs()
 
 
@@ -88,11 +88,11 @@ cli.add_command(extract_sanitize_inputs)
 @click.command("preprocess")
 @click.argument("model_name", type=ModelNameType())
 @click.option("--execution-name", type=str, default="")
+@time_command("preprocess")
 @handle_cli_errors("preprocess")
 def preprocess(model_name, execution_name):
-    """Run model-specific pre-processing."""
     validate_preprocess(model_name)
-    model_type, logger = _get_model_with_logger(model_name, "preprocess")
+    model_type, _ = _get_model_with_logger(model_name, "preprocess")
     model_type.preprocess(execution_name)
 
 
@@ -108,6 +108,7 @@ cli.add_command(preprocess)
 @click.option("--mpich-path", type=str, default=MPICH_PATH)
 @click.option("--slurm-path", type=str, default=SLURM_PATH)
 @click.option("--skip", is_flag=True, default=False)
+@time_command("run")
 @handle_cli_errors("run")
 def run(
     model_name,
@@ -119,7 +120,6 @@ def run(
     slurm_path,
     skip,
 ):
-    """Run the model by submitting to a job scheduler."""
     validate_run(model_name, queue, core_count, max_cores_per_node, max_job_time_hours)
     model_type, logger = _get_model_with_logger(model_name, "run")
     logger.info(f"Submitting job to SLURM with {core_count} cores in {queue} queue")
@@ -141,9 +141,9 @@ cli.add_command(run)
 @click.command("generate_execution_status")
 @click.argument("model_name", type=ModelNameType())
 @click.option("--job-id", type=str, default="")
+@time_command("generate_execution_status")
 @handle_cli_errors("generate_execution_status")
 def generate_execution_status(model_name, job_id):
-    """Diagnose execution status with model-specific business rules."""
     validate_generate_execution_status(model_name)
     model_type, logger = _get_model_with_logger(model_name, "generate_execution_status")
     status = model_type.generate_execution_status(job_id)
@@ -155,11 +155,11 @@ cli.add_command(generate_execution_status)
 
 @click.command("postprocess")
 @click.argument("model_name", type=ModelNameType())
+@time_command("postprocess")
 @handle_cli_errors("postprocess")
 def postprocess(model_name):
-    """Run model-specific post-processing steps."""
     validate_postprocess(model_name)
-    model_type, logger = _get_model_with_logger(model_name, "postprocess")
+    model_type, _ = _get_model_with_logger(model_name, "postprocess")
     model_type.postprocess()
 
 
@@ -169,11 +169,11 @@ cli.add_command(postprocess)
 @click.command("output_compression_and_cleanup")
 @click.argument("model_name", type=ModelNameType())
 @click.argument("num_cpus", type=PositiveIntType())
+@time_command("output_compression_and_cleanup")
 @handle_cli_errors("output_compression_and_cleanup")
 def output_compression_and_cleanup(model_name, num_cpus):
-    """Compress output files and clean the root directory."""
     validate_output_compression_and_cleanup(model_name, num_cpus)
-    model_type, logger = _get_model_with_logger(model_name, "output_compression_and_cleanup")
+    model_type, _ = _get_model_with_logger(model_name, "output_compression_and_cleanup")
     model_type.output_compression_and_cleanup(num_cpus)
 
 
@@ -183,11 +183,11 @@ cli.add_command(output_compression_and_cleanup)
 @click.command("result_upload")
 @click.argument("model_name", type=ModelNameType())
 @click.argument("path", type=S3PathType())
+@time_command("result_upload")
 @handle_cli_errors("result_upload")
 def result_upload(model_name, path):
-    """Upload results to an S3 bucket."""
     validate_result_upload(model_name, path)
-    model_type, logger = _get_model_with_logger(model_name, "result_upload")
+    model_type, _ = _get_model_with_logger(model_name, "result_upload")
     model_type.result_upload(path)
 
 
@@ -198,9 +198,9 @@ cli.add_command(result_upload)
 @click.argument("model_name", type=ModelNameType())
 @click.option("--job-id", type=str, default="")
 @click.option("--slurm-path", type=str, default=SLURM_PATH)
+@time_command("cancel_run")
 @handle_cli_errors("cancel_run")
 def cancel_run(model_name, job_id, slurm_path):
-    """Cancel a job execution and wait for it to leave the queue."""
     validate_cancel_run(model_name)
     model_type, logger = _get_model_with_logger(model_name, "cancel_run")
     model_type.cancel_run(job_id, slurm_path)
@@ -214,9 +214,9 @@ cli.add_command(cancel_run)
 @click.argument("model_name", type=ModelNameType())
 @click.argument("artifacts_path", type=S3PathType())
 @click.option("--fetch-inputs", is_flag=True, default=False)
+@time_command("download_executed_run")
 @handle_cli_errors("download_executed_run")
 def download_executed_run(model_name, artifacts_path, fetch_inputs):
-    """Download the executed run outputs from a given path."""
     validate_download_executed_run(model_name, artifacts_path)
     model_type, logger = _get_model_with_logger(model_name, "download_executed_run")
     model_type.download_executed_run(artifacts_path, fetch_inputs=fetch_inputs)
@@ -228,9 +228,9 @@ cli.add_command(download_executed_run)
 
 @click.command("fetch_extract_raw_outputs")
 @click.argument("outputs_path", type=S3PathType())
+@time_command("fetch_extract_raw_outputs")
 @handle_cli_errors("fetch_extract_raw_outputs")
 def fetch_extract_raw_outputs(outputs_path):
-    """Download and extract a user-provided outputs zip from S3."""
     logger = Log.configure_logger()
     validate_fetch_extract_raw_outputs(outputs_path)
     parsed = path_to_bucket_and_key(outputs_path)

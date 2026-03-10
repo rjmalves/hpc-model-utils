@@ -56,7 +56,15 @@ def handle_cli_errors(command_name: str) -> Callable[[_F], _F]:
             except S3Error as e:
                 _handle_error(e, command_name, logger, ModelOpsCommands.set_data_error)
             except SlurmError as e:
-                _handle_error(e, command_name, logger, ModelOpsCommands.set_model_error)
+                if not e.command_name:
+                    e.command_name = command_name
+                _handle_error(
+                    e,
+                    command_name,
+                    logger,
+                    ModelOpsCommands.set_model_error,
+                    annotation=_build_slurm_annotation(e),
+                )
                 if e.completion_info is not None:
                     info = e.completion_info
                     logger.error(
@@ -79,6 +87,10 @@ def handle_cli_errors(command_name: str) -> Callable[[_F], _F]:
                     exit_code=EXIT_UNKNOWN_ERROR,
                 )
                 ModelOpsCommands.set_model_error()
+                try:
+                    ModelOpsCommands.set_annotation(_build_annotation(wrapped))
+                except Exception:
+                    pass
                 logger.exception(str(wrapped))
                 sys.exit(EXIT_UNKNOWN_ERROR)
 
@@ -92,10 +104,32 @@ def _handle_error(
     command_name: str,
     logger: logging.Logger,
     signal_fn: Callable[[], None],
+    annotation: str | None = None,
 ) -> None:
-    """Helper to set command name, signal, log, and exit."""
+    """Helper to set command name, signal, annotate, log, and exit."""
     if not error.command_name:
         error.command_name = command_name
     signal_fn()
+    try:
+        ModelOpsCommands.set_annotation(
+            annotation if annotation is not None else _build_annotation(error)
+        )
+    except Exception:
+        pass
     logger.error(str(error))
     sys.exit(error.exit_code)
+
+
+def _build_annotation(error: CLIError) -> str:
+    """Build a plain-text annotation string from a CLIError, truncated to 500 chars."""
+    return str(error)[:500]
+
+
+def _build_slurm_annotation(error: SlurmError) -> str:
+    """Build an enriched annotation for SlurmError, appending sacct fields when available."""
+    base = _build_annotation(error)
+    if error.completion_info is not None:
+        info = error.completion_info
+        suffix = f" | job_id={info.job_id} state={info.state} exit_code={info.exit_code}"
+        return (base + suffix)[:500]
+    return base

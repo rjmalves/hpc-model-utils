@@ -17,7 +17,7 @@ Improve error handling and resilience in the `hpc-model-utils` CLI application b
 | 02   | SLURM Monitoring  | 3       | Detailed     | Completed |
 | 03   | Structured Errors | 3       | Refined      | Completed |
 | 04   | Test Coverage     | 3       | Refined      | Completed |
-| 05   | Observability     | 2       | Outline      | Outline   |
+| 05   | Observability     | 2       | Refined      | Completed |
 
 ## Progress Tracking
 
@@ -36,5 +36,5 @@ Improve error handling and resilience in the `hpc-model-utils` CLI application b
 | ticket-011 | Add unit tests for validation primitives and Click types      | epic-04 | completed | Refined      | 1.00      | 0.93    | EXCELLENT  |
 | ticket-012 | Add unit tests for SLURM monitoring functions                 | epic-04 | completed | Refined      | 1.00      | 0.93    | EXCELLENT  |
 | ticket-013 | Add CLI integration tests for error handling and exit codes   | epic-04 | completed | Refined      | 1.00      | 0.93    | EXCELLENT  |
-| ticket-014 | Add structured error annotations to ModelOps signaling        | epic-05 | pending   | Outline      | --        | --      | --         |
-| ticket-015 | Add command timing and diagnostic output                      | epic-05 | pending   | Outline      | --        | --      | --         |
+| ticket-014 | Add structured error annotations to ModelOps signaling        | epic-05 | completed | Refined      | 1.00      | 0.85    | ACCEPTABLE |
+| ticket-015 | Add command timing and diagnostic output                      | epic-05 | completed | Refined      | 1.00      | 0.86    | ACCEPTABLE |
