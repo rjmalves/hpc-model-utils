@@ -1,0 +1,199 @@
+{
+  "plan": "cli-resilience",
+  "last_updated": "2026-03-10T14:31:25Z",
+  "progressive": true,
+  "tickets": {
+    "ticket-001-create-validation-primitives.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "scores": {
+        "quality": 0.825,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 1.0,
+          "lint_cleanliness": 1.0,
+          "type_safety": 0.5,
+          "test_delta": 0.0
+        },
+        "readiness": 0.97,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 0.9,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "python-task-automation-developer"
+    },
+    "ticket-002-implement-per-command-validators.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "scores": {
+        "quality": 0.80,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 0.5,
+          "lint_cleanliness": 1.0,
+          "type_safety": 0.5,
+          "test_delta": 1.0
+        },
+        "readiness": 0.97,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 0.9,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "python-task-automation-developer"
+    },
+    "ticket-003-integrate-validators-into-cli.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "scores": {
+        "quality": 0.83,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 1.0,
+          "lint_cleanliness": 1.0,
+          "type_safety": 0.5,
+          "test_delta": 0.0
+        },
+        "readiness": 0.97,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 0.9,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "python-task-automation-developer"
+    },
+    "ticket-004-add-click-parameter-types.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "scores": {
+        "quality": 0.775,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 1.0,
+          "lint_cleanliness": 1.0,
+          "type_safety": 0.5,
+          "test_delta": 0.0
+        },
+        "readiness": 0.97,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 0.9,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "python-task-automation-developer"
+    },
+    "ticket-005-rewrite-follow-submitted-job.md": {
+      "status": "pending",
+      "detail_level": "detailed",
+      "scores": {
+        "readiness": 0.96,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 0.85,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      }
+    },
+    "ticket-006-add-sacct-post-completion.md": {
+      "status": "pending",
+      "detail_level": "detailed",
+      "scores": {
+        "readiness": 0.99,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 0.95,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      }
+    },
+    "ticket-007-capture-stderr-and-final-stdout.md": {
+      "status": "pending",
+      "detail_level": "detailed",
+      "scores": {
+        "readiness": 0.97,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 0.9,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      }
+    },
+    "ticket-008-define-error-hierarchy.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-009-create-cli-error-handler.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-010-replace-try-except-in-cli.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-011-test-validation-primitives.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-012-test-slurm-monitoring.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-013-cli-integration-tests.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-014-structured-error-annotations.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-015-command-timing-diagnostics.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    }
+  },
+  "epics": {
+    "epic-01-input-validation": {
+      "phase": "executing",
+      "learning_extracted": false
+    },
+    "epic-02-slurm-monitoring": {
+      "phase": "executing",
+      "learning_extracted": false
+    },
+    "epic-03-structured-errors": {
+      "phase": "outline",
+      "learning_extracted": false
+    },
+    "epic-04-test-coverage": {
+      "phase": "outline",
+      "learning_extracted": false
+    },
+    "epic-05-observability": {
+      "phase": "outline",
+      "learning_extracted": false
+    }
+  }
+}
