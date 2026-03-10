@@ -27,9 +27,9 @@ Improve error handling and resilience in the `hpc-model-utils` CLI application b
 | ticket-002 | Implement per-command validator functions                     | epic-01 | completed | Detailed     | 0.97      | 0.80    | ACCEPTABLE |
 | ticket-003 | Integrate validators into CLI commands                        | epic-01 | completed | Detailed     | 0.97      | 0.83    | ACCEPTABLE |
 | ticket-004 | Add Click parameter types for semantic validation             | epic-01 | completed | Detailed     | 0.97      | 0.78    | ACCEPTABLE |
-| ticket-005 | Rewrite follow_submitted_job without initial sleep            | epic-02 | pending   | Detailed     | 0.96      | --      | --         |
-| ticket-006 | Add sacct-based post-completion status capture                | epic-02 | pending   | Detailed     | 0.99      | --      | --         |
-| ticket-007 | Capture stderr.modelops and final stdout after job completion | epic-02 | pending   | Detailed     | 0.97      | --      | --         |
+| ticket-005 | Rewrite follow_submitted_job without initial sleep            | epic-02 | completed | Detailed     | 0.96      | 0.93    | EXCELLENT  |
+| ticket-006 | Add sacct-based post-completion status capture                | epic-02 | completed | Detailed     | 0.99      | 0.85    | ACCEPTABLE |
+| ticket-007 | Capture stderr.modelops and final stdout after job completion | epic-02 | completed | Detailed     | 0.97      | 0.85    | ACCEPTABLE |
 | ticket-008 | Define error hierarchy and exit code mapping                  | epic-03 | pending   | Outline      | --        | --      | --         |
 | ticket-009 | Create centralized CLI error handler decorator                | epic-03 | pending   | Outline      | --        | --      | --         |
 | ticket-010 | Replace try/except Exception in all CLI commands              | epic-03 | pending   | Outline      | --        | --      | --         |
