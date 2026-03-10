@@ -16,7 +16,7 @@ Improve error handling and resilience in the `hpc-model-utils` CLI application b
 | 01   | Input Validation  | 4       | Detailed     | Completed |
 | 02   | SLURM Monitoring  | 3       | Detailed     | Completed |
 | 03   | Structured Errors | 3       | Refined      | Completed |
-| 04   | Test Coverage     | 3       | Refined      | Executing |
+| 04   | Test Coverage     | 3       | Refined      | Completed |
 | 05   | Observability     | 2       | Outline      | Outline   |
 
 ## Progress Tracking
