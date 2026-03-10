@@ -1,6 +1,6 @@
 {
   "plan": "cli-resilience",
-  "last_updated": "2026-03-10T16:20:32Z",
+  "last_updated": "2026-03-10T16:48:48Z",
   "progressive": true,
   "tickets": {
     "ticket-001-create-validation-primitives.md": {
@@ -172,16 +172,76 @@
       "agent": "python-task-automation-developer"
     },
     "ticket-008-define-error-hierarchy.md": {
-      "status": "pending",
-      "detail_level": "outline"
+      "status": "completed",
+      "detail_level": "refined",
+      "scores": {
+        "quality": 0.925,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 1.0,
+          "lint_cleanliness": 1.0,
+          "type_safety": 0.5,
+          "test_delta": 1.0
+        },
+        "readiness": 1.0,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 1.0,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "python-task-automation-developer"
     },
     "ticket-009-create-cli-error-handler.md": {
-      "status": "pending",
-      "detail_level": "outline"
+      "status": "completed",
+      "detail_level": "refined",
+      "scores": {
+        "quality": 0.725,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 0.5,
+          "lint_cleanliness": 0.5,
+          "type_safety": 0.5,
+          "test_delta": 1.0
+        },
+        "readiness": 1.0,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 1.0,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "python-task-automation-developer"
     },
     "ticket-010-replace-try-except-in-cli.md": {
-      "status": "pending",
-      "detail_level": "outline"
+      "status": "completed",
+      "detail_level": "refined",
+      "scores": {
+        "quality": 0.875,
+        "quality_breakdown": {
+          "conformance": 1.0,
+          "scope_adherence": 1.0,
+          "lint_cleanliness": 1.0,
+          "type_safety": 0.5,
+          "test_delta": 0.5
+        },
+        "readiness": 1.0,
+        "readiness_breakdown": {
+          "structure": 1.0,
+          "testability": 1.0,
+          "boundary": 1.0,
+          "dependency_clarity": 1.0,
+          "atomicity": 1.0
+        }
+      },
+      "workflow_step": null,
+      "agent": "python-task-automation-developer"
     },
     "ticket-011-test-validation-primitives.md": {
       "status": "pending",
@@ -214,8 +274,8 @@
       "learning_extracted": true
     },
     "epic-03-structured-errors": {
-      "phase": "outline",
-      "learning_extracted": false
+      "phase": "completed",
+      "learning_extracted": true
     },
     "epic-04-test-coverage": {
       "phase": "outline",

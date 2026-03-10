@@ -13,9 +13,9 @@ Improve error handling and resilience in the `hpc-model-utils` CLI application b
 
 | Epic | Name              | Tickets | Detail Level | Phase     |
 | ---- | ----------------- | ------- | ------------ | --------- |
-| 01   | Input Validation  | 4       | Detailed     | Executing |
-| 02   | SLURM Monitoring  | 3       | Detailed     | Executing |
-| 03   | Structured Errors | 3       | Outline      | Outline   |
+| 01   | Input Validation  | 4       | Detailed     | Completed |
+| 02   | SLURM Monitoring  | 3       | Detailed     | Completed |
+| 03   | Structured Errors | 3       | Refined      | Executing |
 | 04   | Test Coverage     | 3       | Outline      | Outline   |
 | 05   | Observability     | 2       | Outline      | Outline   |
 
@@ -30,9 +30,9 @@ Improve error handling and resilience in the `hpc-model-utils` CLI application b
 | ticket-005 | Rewrite follow_submitted_job without initial sleep            | epic-02 | completed | Detailed     | 0.96      | 0.93    | EXCELLENT  |
 | ticket-006 | Add sacct-based post-completion status capture                | epic-02 | completed | Detailed     | 0.99      | 0.85    | ACCEPTABLE |
 | ticket-007 | Capture stderr.modelops and final stdout after job completion | epic-02 | completed | Detailed     | 0.97      | 0.85    | ACCEPTABLE |
-| ticket-008 | Define error hierarchy and exit code mapping                  | epic-03 | pending   | Outline      | --        | --      | --         |
-| ticket-009 | Create centralized CLI error handler decorator                | epic-03 | pending   | Outline      | --        | --      | --         |
-| ticket-010 | Replace try/except Exception in all CLI commands              | epic-03 | pending   | Outline      | --        | --      | --         |
+| ticket-008 | Define error hierarchy and exit code mapping                  | epic-03 | completed | Refined      | 1.00      | 0.93    | EXCELLENT  |
+| ticket-009 | Create centralized CLI error handler decorator                | epic-03 | completed | Refined      | 1.00      | 0.73    | BELOW GATE |
+| ticket-010 | Replace try/except Exception in all CLI commands              | epic-03 | completed | Refined      | 1.00      | 0.88    | ACCEPTABLE |
 | ticket-011 | Add unit tests for validation primitives and validators       | epic-04 | pending   | Outline      | --        | --      | --         |
 | ticket-012 | Add unit tests for SLURM monitoring functions                 | epic-04 | pending   | Outline      | --        | --      | --         |
 | ticket-013 | Add CLI integration tests for error handling and exit codes   | epic-04 | pending   | Outline      | --        | --      | --         |

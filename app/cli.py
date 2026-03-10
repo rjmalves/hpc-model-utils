@@ -3,115 +3,112 @@ import os
 import click
 
 from app.adapter.repository.abstractmodel import ModelFactory
-from app.utils.commands import ModelOpsCommands
+from app.click_types import ModelNameType, PositiveIntType, S3PathType
+from app.error_handler import handle_cli_errors
+from app.errors import ValidationError
 from app.utils.constants import MPICH_PATH, RAW_OUTPUTS_FILE, SLURM_PATH
 from app.utils.fs import extract_zip_content
 from app.utils.log import Log
 from app.utils.s3 import check_and_download_bucket_items, path_to_bucket_and_key
+from app.validation import (
+    validate_cancel_run,
+    validate_check_and_fetch_executables,
+    validate_check_and_fetch_inputs,
+    validate_download_executed_run,
+    validate_extract_sanitize_inputs,
+    validate_fetch_extract_raw_outputs,
+    validate_generate_execution_status,
+    validate_output_compression_and_cleanup,
+    validate_postprocess,
+    validate_preprocess,
+    validate_result_upload,
+    validate_run,
+)
 
 
 @click.group()
 def cli():
-    """
-    CLI app that handles job script steps for running
-    energy-related models in HPC clusters.
-    """
+    """CLI app for running energy-related models in HPC clusters."""
     pass
 
 
-@click.command("check_and_fetch_inputs")
-@click.argument("model_name", type=str)
-@click.argument("path", type=str)
-@click.option("--parent-path", type=str, default="")
-@click.option("--delete", is_flag=True, default=False)
-def check_and_fetch_inputs(model_name, path, parent_path, delete):
-    """
-    Checks and downloads input data from
-    a given S3 bucket.
-    """
+def _get_model_with_logger(model_name: str, command_name: str):
+    """Get model instance from factory, raising ValidationError if factory fails."""
     logger = Log.configure_logger()
-
     try:
         model_type = ModelFactory().factory(model_name, logger)
-        model_type.check_and_fetch_inputs(path, parent_path, delete=delete)
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    except ValueError as exc:
+        raise ValidationError(str(exc), command_name=command_name) from exc
+    return model_type, logger
+
+
+@click.command("check_and_fetch_inputs")
+@click.argument("model_name", type=ModelNameType())
+@click.argument("path", type=S3PathType())
+@click.option("--parent-path", type=str, default="")
+@click.option("--delete", is_flag=True, default=False)
+@handle_cli_errors("check_and_fetch_inputs")
+def check_and_fetch_inputs(model_name, path, parent_path, delete):
+    """Check and download input data from a given S3 bucket."""
+    validate_check_and_fetch_inputs(model_name, path, parent_path)
+    model_type, logger = _get_model_with_logger(model_name, "check_and_fetch_inputs")
+    model_type.check_and_fetch_inputs(path, parent_path, delete=delete)
 
 
 cli.add_command(check_and_fetch_inputs)
 
 
 @click.command("check_and_fetch_executables")
-@click.argument("model_name", type=str)
-@click.argument("path", type=str)
+@click.argument("model_name", type=ModelNameType())
+@click.argument("path", type=S3PathType())
+@handle_cli_errors("check_and_fetch_executables")
 def check_and_fetch_executables(model_name, path):
-    """
-    Checks and downloads model executables from
-    a given S3 bucket.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        model_type = ModelFactory().factory(model_name, logger)
-        model_type.check_and_fetch_executables(path)
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Check and download model executables from a given S3 bucket."""
+    validate_check_and_fetch_executables(model_name, path)
+    model_type, logger = _get_model_with_logger(model_name, "check_and_fetch_executables")
+    model_type.check_and_fetch_executables(path)
 
 
 cli.add_command(check_and_fetch_executables)
 
 
 @click.command("extract_sanitize_inputs")
-@click.argument("model_name", type=str)
+@click.argument("model_name", type=ModelNameType())
+@handle_cli_errors("extract_sanitize_inputs")
 def extract_sanitize_inputs(model_name):
-    """
-    Deals with a compressed (.zip) file that contains
-    model inputs, extracting and fixing encoding.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        model_type = ModelFactory().factory(model_name, logger)
-        model_type.extract_sanitize_inputs()
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Extract and sanitize compressed input files."""
+    validate_extract_sanitize_inputs(model_name)
+    model_type, logger = _get_model_with_logger(model_name, "extract_sanitize_inputs")
+    model_type.extract_sanitize_inputs()
 
 
 cli.add_command(extract_sanitize_inputs)
 
 
 @click.command("preprocess")
-@click.argument("model_name", type=str)
+@click.argument("model_name", type=ModelNameType())
 @click.option("--execution-name", type=str, default="")
+@handle_cli_errors("preprocess")
 def preprocess(model_name, execution_name):
-    """
-    Runs model-specific pre-processing.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        model_type = ModelFactory().factory(model_name, logger)
-        model_type.preprocess(execution_name)
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Run model-specific pre-processing."""
+    validate_preprocess(model_name)
+    model_type, logger = _get_model_with_logger(model_name, "preprocess")
+    model_type.preprocess(execution_name)
 
 
 cli.add_command(preprocess)
 
 
 @click.command("run")
-@click.argument("model_name", type=str)
+@click.argument("model_name", type=ModelNameType())
 @click.argument("queue", type=str)
-@click.argument("core_count", type=int)
+@click.argument("core_count", type=PositiveIntType())
 @click.option("--max-cores-per-node", type=int, default=None)
 @click.option("--max-job-time-hours", type=int, default=None)
 @click.option("--mpich-path", type=str, default=MPICH_PATH)
 @click.option("--slurm-path", type=str, default=SLURM_PATH)
 @click.option("--skip", is_flag=True, default=False)
+@handle_cli_errors("run")
 def run(
     model_name,
     queue,
@@ -122,182 +119,128 @@ def run(
     slurm_path,
     skip,
 ):
-    """
-    Runs the model by submitting to a job scheduler.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        logger.info(
-            f"Submitting job to SLURM with {core_count} cores in {queue} queue"
-        )
-        model_type = ModelFactory().factory(model_name, logger)
-        model_type.run(
-            queue,
-            core_count,
-            mpich_path,
-            slurm_path,
-            max_cores_per_node,
-            max_job_time_hours,
-            skip_model=skip,
-        )
-        logger.info("Model execution terminated")
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Run the model by submitting to a job scheduler."""
+    validate_run(model_name, queue, core_count, max_cores_per_node, max_job_time_hours)
+    model_type, logger = _get_model_with_logger(model_name, "run")
+    logger.info(f"Submitting job to SLURM with {core_count} cores in {queue} queue")
+    model_type.run(
+        queue,
+        core_count,
+        mpich_path,
+        slurm_path,
+        max_cores_per_node,
+        max_job_time_hours,
+        skip_model=skip,
+    )
+    logger.info("Model execution terminated")
 
 
 cli.add_command(run)
 
 
 @click.command("generate_execution_status")
-@click.argument("model_name", type=str)
+@click.argument("model_name", type=ModelNameType())
 @click.option("--job-id", type=str, default="")
+@handle_cli_errors("generate_execution_status")
 def generate_execution_status(model_name, job_id):
-    """
-    Diagnosis the execution status with model-specific
-    business rules.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        model_type = ModelFactory().factory(model_name, logger)
-        status = model_type.generate_execution_status(job_id)
-        logger.info(f"Generated execution status: {status}")
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Diagnose execution status with model-specific business rules."""
+    validate_generate_execution_status(model_name)
+    model_type, logger = _get_model_with_logger(model_name, "generate_execution_status")
+    status = model_type.generate_execution_status(job_id)
+    logger.info(f"Generated execution status: {status}")
 
 
 cli.add_command(generate_execution_status)
 
 
 @click.command("postprocess")
-@click.argument("model_name", type=str)
+@click.argument("model_name", type=ModelNameType())
+@handle_cli_errors("postprocess")
 def postprocess(model_name):
-    """
-    Runs model-specific post-processing steps.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        model_type = ModelFactory().factory(model_name, logger)
-        model_type.postprocess()
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Run model-specific post-processing steps."""
+    validate_postprocess(model_name)
+    model_type, logger = _get_model_with_logger(model_name, "postprocess")
+    model_type.postprocess()
 
 
 cli.add_command(postprocess)
 
 
 @click.command("output_compression_and_cleanup")
-@click.argument("model_name", type=str)
-@click.argument("num_cpus", type=int)
+@click.argument("model_name", type=ModelNameType())
+@click.argument("num_cpus", type=PositiveIntType())
+@handle_cli_errors("output_compression_and_cleanup")
 def output_compression_and_cleanup(model_name, num_cpus):
-    """
-    Compresses the output files in some groups
-    and cleans the root directory.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        model_type = ModelFactory().factory(model_name, logger)
-        model_type.output_compression_and_cleanup(num_cpus)
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Compress output files and clean the root directory."""
+    validate_output_compression_and_cleanup(model_name, num_cpus)
+    model_type, logger = _get_model_with_logger(model_name, "output_compression_and_cleanup")
+    model_type.output_compression_and_cleanup(num_cpus)
 
 
 cli.add_command(output_compression_and_cleanup)
 
 
 @click.command("result_upload")
-@click.argument("model_name", type=str)
-@click.argument("path", type=str)
+@click.argument("model_name", type=ModelNameType())
+@click.argument("path", type=S3PathType())
+@handle_cli_errors("result_upload")
 def result_upload(model_name, path):
-    """
-    Uploads the results to an S3 bucket.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        model_type = ModelFactory().factory(model_name, logger)
-        model_type.result_upload(path)
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Upload results to an S3 bucket."""
+    validate_result_upload(model_name, path)
+    model_type, logger = _get_model_with_logger(model_name, "result_upload")
+    model_type.result_upload(path)
 
 
 cli.add_command(result_upload)
 
 
 @click.command("cancel_run")
-@click.argument("model_name", type=str)
+@click.argument("model_name", type=ModelNameType())
 @click.option("--job-id", type=str, default="")
 @click.option("--slurm-path", type=str, default=SLURM_PATH)
+@handle_cli_errors("cancel_run")
 def cancel_run(model_name, job_id, slurm_path):
-    """
-    Cancels a job execution and waits for it to leave the queue.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        model_type = ModelFactory().factory(model_name, logger)
-        model_type.cancel_run(job_id, slurm_path)
-        logger.info(f"Cancelled job: {job_id}")
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Cancel a job execution and wait for it to leave the queue."""
+    validate_cancel_run(model_name)
+    model_type, logger = _get_model_with_logger(model_name, "cancel_run")
+    model_type.cancel_run(job_id, slurm_path)
+    logger.info(f"Cancelled job: {job_id}")
 
 
 cli.add_command(cancel_run)
 
 
 @click.command("download_executed_run")
-@click.argument("model_name", type=str)
-@click.argument("artifacts_path", type=str)
+@click.argument("model_name", type=ModelNameType())
+@click.argument("artifacts_path", type=S3PathType())
 @click.option("--fetch-inputs", is_flag=True, default=False)
+@handle_cli_errors("download_executed_run")
 def download_executed_run(model_name, artifacts_path, fetch_inputs):
-    """
-    Downloads the executed run outputs from a given path.
-    """
-    logger = Log.configure_logger()
-
-    try:
-        model_type = ModelFactory().factory(model_name, logger)
-        model_type.download_executed_run(artifacts_path, fetch_inputs=fetch_inputs)
-        logger.info(f"Downloaded executed run artifacts from: {artifacts_path}")
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    """Download the executed run outputs from a given path."""
+    validate_download_executed_run(model_name, artifacts_path)
+    model_type, logger = _get_model_with_logger(model_name, "download_executed_run")
+    model_type.download_executed_run(artifacts_path, fetch_inputs=fetch_inputs)
+    logger.info(f"Downloaded executed run artifacts from: {artifacts_path}")
 
 
 cli.add_command(download_executed_run)
 
 
 @click.command("fetch_extract_raw_outputs")
-@click.argument("outputs_path", type=str)
+@click.argument("outputs_path", type=S3PathType())
+@handle_cli_errors("fetch_extract_raw_outputs")
 def fetch_extract_raw_outputs(outputs_path):
-    """
-    Downloads and extracts a user-provided outputs zip from S3
-    into the current working directory.
-    """
+    """Download and extract a user-provided outputs zip from S3."""
     logger = Log.configure_logger()
-
-    try:
-        parsed = path_to_bucket_and_key(outputs_path)
-        downloaded = check_and_download_bucket_items(
-            parsed["bucket"], ".", parsed["key"], logger
-        )
-        downloaded_file = downloaded[0]
-        os.rename(downloaded_file, RAW_OUTPUTS_FILE)
-        extract_zip_content(RAW_OUTPUTS_FILE)
-        os.remove(RAW_OUTPUTS_FILE)
-        logger.info(f"Extracted outputs from: {outputs_path}")
-    except Exception as e:
-        ModelOpsCommands.set_model_error()
-        logger.exception(str(e))
+    validate_fetch_extract_raw_outputs(outputs_path)
+    parsed = path_to_bucket_and_key(outputs_path)
+    downloaded = check_and_download_bucket_items(
+        parsed["bucket"], ".", parsed["key"], logger
+    )
+    os.rename(downloaded[0], RAW_OUTPUTS_FILE)
+    extract_zip_content(RAW_OUTPUTS_FILE)
+    os.remove(RAW_OUTPUTS_FILE)
+    logger.info(f"Extracted outputs from: {outputs_path}")
 
 
 cli.add_command(fetch_extract_raw_outputs)
