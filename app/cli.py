@@ -37,7 +37,6 @@ def check_and_fetch_inputs(model_name, path, parent_path, delete):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(check_and_fetch_inputs)
@@ -59,7 +58,6 @@ def check_and_fetch_executables(model_name, path):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(check_and_fetch_executables)
@@ -80,7 +78,6 @@ def extract_sanitize_inputs(model_name):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(extract_sanitize_inputs)
@@ -101,7 +98,6 @@ def preprocess(model_name, execution_name):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(preprocess)
@@ -149,7 +145,6 @@ def run(
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(run)
@@ -172,7 +167,6 @@ def generate_execution_status(model_name, job_id):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(generate_execution_status)
@@ -192,7 +186,6 @@ def postprocess(model_name):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(postprocess)
@@ -214,7 +207,6 @@ def output_compression_and_cleanup(model_name, num_cpus):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(output_compression_and_cleanup)
@@ -235,7 +227,6 @@ def result_upload(model_name, path):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(result_upload)
@@ -258,7 +249,6 @@ def cancel_run(model_name, job_id, slurm_path):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(cancel_run)
@@ -281,7 +271,6 @@ def download_executed_run(model_name, artifacts_path, fetch_inputs):
     except Exception as e:
         ModelOpsCommands.set_model_error()
         logger.exception(str(e))
-        # raise e
 
 
 cli.add_command(download_executed_run)
