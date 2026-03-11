@@ -28,5 +28,8 @@ coverage.xml
 .env.localstack
 localstack-data/
 
+# Implementation plans
+plans/
+
 # Claude Code
 .claude/
