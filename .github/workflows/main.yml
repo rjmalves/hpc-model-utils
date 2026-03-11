@@ -33,20 +33,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-    services:
-      localstack:
-        image: localstack/localstack:4.4
-        ports:
-          - 4566:4566
-        env:
-          SERVICES: s3
-          DEBUG: 0
-        options: >-
-          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
-          --health-interval 10s
-          --health-timeout 10s
-          --health-retries 10
-          --health-start-period 30s
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -55,6 +41,14 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
       - name: Install the project
         run: uv sync --all-extras --dev
+      - name: Start LocalStack
+        run: |
+          docker run -d \
+            --name localstack \
+            -p 4566:4566 \
+            -e SERVICES=s3 \
+            -e DEBUG=0 \
+            localstack/localstack:4.4
       - name: Wait for LocalStack
         run: |
           timeout 120 bash -c 'until curl -s http://localhost:4566/_localstack/health | grep -q "running"; do echo "Waiting for LocalStack..."; sleep 3; done'
@@ -73,3 +67,6 @@ jobs:
           files: ./coverage.xml
           flags: integration-tests
           name: integration-coverage
+      - name: Stop LocalStack
+        if: always()
+        run: docker rm -f localstack || true
