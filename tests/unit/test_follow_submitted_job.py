@@ -19,7 +19,6 @@ _JOB_ID = "12345"
 _SQUEUE_RUNNING = (0, ["12345 normal mymodel user PD 0:00 1 (Resources)"])
 _SQUEUE_EMPTY = (0, [""])
 _SQUEUE_ERROR = (1, ["slurm_load_jobs error: Invalid job id specified"])
-_TAIL_OUTPUT = (0, ["line 1", "line 2"])
 _SACCT_COMPLETED = (0, [f"{_JOB_ID}|COMPLETED|0:0|00:05:23|4096K"])
 _SACCT_ERROR = (1, ["sacct: error: Problem talking to the database"])
 _SACCT_NONE = (None, [])
@@ -138,7 +137,7 @@ class TestReadJobOutputFiles:
 
 
 class TestFastJob:
-    def test_stdout_read_after_instant_completion(self, capsys):
+    def test_completion_info_logged_after_instant_exit(self, capsys):
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
@@ -159,7 +158,8 @@ class TestFastJob:
         mock_sleep.assert_not_called()
         assert mock_rit.call_count == 2
         captured = capsys.readouterr()
-        assert "stdout.modelops" in captured.out
+        assert "COMPLETED" in captured.out
+        assert _JOB_ID in captured.out
 
     def test_no_sleep_before_first_squeue_check(self):
         call_order: list[str] = []
@@ -186,31 +186,22 @@ class TestFastJob:
 
 
 class TestNormalJob:
-    def test_stdout_tailed_each_iteration(self):
-        squeue_responses = [
-            _SQUEUE_RUNNING,
-            _SQUEUE_RUNNING,
-            _SQUEUE_RUNNING,
-            _SQUEUE_EMPTY,
-        ]
-        tail_responses = [_TAIL_OUTPUT] * 3
-        sacct_response = [_SACCT_COMPLETED]
-        all_responses = (
-            [squeue_responses[0]]
-            + [tail_responses[0]]
-            + [squeue_responses[1]]
-            + [tail_responses[1]]
-            + [squeue_responses[2]]
-            + [tail_responses[2]]
-            + [squeue_responses[3]]
-            + sacct_response
-        )
+    def test_new_output_streamed_each_iteration(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        stdout_path = tmp_path / "stdout.modelops"
+        stdout_path.write_text("line 1\nline 2\n")
 
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
-                side_effect=all_responses,
-            ) as mock_rit,
+                side_effect=[
+                    _SQUEUE_RUNNING,
+                    _SQUEUE_RUNNING,
+                    _SQUEUE_RUNNING,
+                    _SQUEUE_EMPTY,
+                    _SACCT_COMPLETED,
+                ],
+            ),
             patch(
                 "app.utils.scheduler.read_job_output_files",
                 return_value=_OUTPUT_STDOUT_ONLY,
@@ -221,7 +212,10 @@ class TestNormalJob:
             result = follow_submitted_job(_JOB_ID, timeout=3600)
 
         assert result is None
-        assert mock_rit.call_count == 8
+        captured = capsys.readouterr()
+        # Lines should appear exactly once (streaming, not repeated)
+        assert captured.out.count("line 1") == 1
+        assert captured.out.count("line 2") == 1
 
     def test_sleep_called_with_poll_interval(self):
         with (
@@ -306,12 +300,8 @@ class TestTimeout:
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
-                side_effect=[
-                    _SQUEUE_RUNNING,
-                    _TAIL_OUTPUT,
-                ],
+                return_value=_SQUEUE_RUNNING,
             ),
-            patch("app.utils.scheduler.os.path.exists", return_value=True),
             patch("app.utils.scheduler.sleep"),
             patch(
                 "app.utils.scheduler.time",
@@ -325,9 +315,8 @@ class TestTimeout:
         with (
             patch(
                 "app.utils.scheduler.run_in_terminal",
-                side_effect=[_SQUEUE_RUNNING, _TAIL_OUTPUT],
+                return_value=_SQUEUE_RUNNING,
             ),
-            patch("app.utils.scheduler.os.path.exists", return_value=True),
             patch("app.utils.scheduler.sleep"),
             patch(
                 "app.utils.scheduler.time",
@@ -340,23 +329,17 @@ class TestTimeout:
 
 class TestSqueueFailure:
     def test_runtime_error_raised_on_squeue_non_zero(self):
-        with (
-            patch(
-                "app.utils.scheduler.run_in_terminal",
-                return_value=_SQUEUE_ERROR,
-            ),
-            patch("app.utils.scheduler.os.path.exists", return_value=False),
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=_SQUEUE_ERROR,
         ):
             with pytest.raises(RuntimeError, match="squeue failed"):
                 follow_submitted_job(_JOB_ID, timeout=60)
 
     def test_runtime_error_raised_on_squeue_none_code(self):
-        with (
-            patch(
-                "app.utils.scheduler.run_in_terminal",
-                return_value=(None, []),
-            ),
-            patch("app.utils.scheduler.os.path.exists", return_value=False),
+        with patch(
+            "app.utils.scheduler.run_in_terminal",
+            return_value=(None, []),
         ):
             with pytest.raises(RuntimeError, match="squeue failed"):
                 follow_submitted_job(_JOB_ID, timeout=60)

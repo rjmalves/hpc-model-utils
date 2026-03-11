@@ -175,12 +175,14 @@ def follow_submitted_job(
     """Monitor a submitted SLURM job until completion.
 
     Immediately starts monitoring (no initial delay). Polls squeue every
-    2 seconds and tails stdout.modelops while the job is running. After
-    the job exits squeue, reads the final stdout.modelops content.
+    2 seconds and streams new lines from stdout.modelops as they appear.
+    Tracks the file read position between polls so each line is printed
+    exactly once, giving the user a real-time streaming experience.
     """
     start_time = time()
     poll_interval = 2.0
     stdout_file = "stdout.modelops"
+    file_position = 0
 
     def _log(msg: str) -> None:
         if logger is not None:
@@ -199,17 +201,36 @@ def follow_submitted_job(
             )
         return any(line.strip() for line in output)
 
-    def _tail_stdout() -> None:
-        if os.path.exists(stdout_file):
-            run_in_terminal(
-                [f"tail -n 100 {stdout_file}"],
-                timeout=10,
-                log_output=True,
-                last_lines_diff=100,
-            )
+    def _stream_new_output() -> None:
+        nonlocal file_position
+        if not os.path.exists(stdout_file):
+            return
+        try:
+            with open(
+                stdout_file, "r", encoding="utf-8", errors="replace"
+            ) as fh:
+                fh.seek(file_position)
+                new_data = fh.read()
+                if new_data:
+                    # Only print complete lines; hold back a partial
+                    # trailing line until the next poll
+                    if new_data.endswith("\n"):
+                        lines = new_data.rstrip("\n").split("\n")
+                        file_position = fh.tell()
+                    else:
+                        parts = new_data.split("\n")
+                        lines = parts[:-1]
+                        # Move position to the start of the incomplete line
+                        file_position = fh.tell() - len(
+                            parts[-1].encode("utf-8", errors="replace")
+                        )
+                    for line in lines:
+                        _log(line)
+        except OSError:
+            pass
 
     while _job_in_queue():
-        _tail_stdout()
+        _stream_new_output()
         elapsed = time() - start_time
         if elapsed > timeout:
             raise RuntimeError(
@@ -217,13 +238,11 @@ def follow_submitted_job(
             )
         sleep(poll_interval)
 
-    _log(f"Job {job_id} no longer in squeue. Reading final output...")
+    # Final read: flush any remaining output after job exits squeue
+    _stream_new_output()
+
+    _log(f"Job {job_id} no longer in squeue.")
     output_files = read_job_output_files()
-    if output_files.stdout_content:
-        _log(f"=== Final stdout.modelops ({len(output_files.stdout_content)} chars) ===")
-        # Log last 200 lines to avoid flooding
-        for line in output_files.stdout_content.splitlines()[-200:]:
-            _log(line)
     if output_files.stderr_content:
         _log(f"WARNING: stderr.modelops contains output ({len(output_files.stderr_content)} chars):")
         for line in output_files.stderr_content.splitlines()[-50:]:
