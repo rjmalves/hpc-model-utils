@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "CLI tool for running energy planning models (NEWAVE, DECOMP, DESSEM) in HPC clusters with SLURM and AWS S3 integration"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 authors = [
   { name = "Mariana Noel", email = "marianasimoesnoel@gmail.com" },
   { name = "Rogerio Alves", email = "rogerioalves.ee@gmail.com" },
@@ -17,9 +17,9 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Scientific/Engineering",
   "Topic :: Utilities",
   "Typing :: Typed",
@@ -74,7 +74,7 @@ dev = [
 ]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 warn_unused_configs = true
 ignore_missing_imports = true
 
@@ -88,7 +88,7 @@ disable_error_code = ["no-any-return"]
 
 [tool.ruff]
 line-length = 80
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]

@@ -28,7 +28,7 @@ Additional commands: `cancel-run`, `download-executed-run`, `fetch-extract-raw-o
 
 ## Installation
 
-Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/rjmalves/hpc-model-utils.git
