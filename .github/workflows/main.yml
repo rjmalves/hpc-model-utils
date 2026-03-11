@@ -35,7 +35,7 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
     services:
       localstack:
-        image: localstack/localstack:3.0
+        image: localstack/localstack:4.4
         ports:
           - 4566:4566
         env:
@@ -44,9 +44,9 @@ jobs:
         options: >-
           --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
           --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-start-period 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -57,7 +57,8 @@ jobs:
         run: uv sync --all-extras --dev
       - name: Wait for LocalStack
         run: |
-          timeout 60 bash -c 'until curl -s http://localhost:4566/_localstack/health | grep -q "\"s3\": \"running\""; do echo "Waiting..."; sleep 2; done'
+          timeout 120 bash -c 'until curl -s http://localhost:4566/_localstack/health | grep -q "running"; do echo "Waiting for LocalStack..."; sleep 3; done'
+          echo "LocalStack is ready!"
       - name: Integration tests
         env:
           AWS_ENDPOINT_URL: http://localhost:4566
