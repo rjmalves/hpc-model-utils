@@ -73,6 +73,19 @@ dev = [
   "ruff>=0.9",
 ]
 
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "app.adapter.repository.*"
+disable_error_code = ["arg-type", "union-attr", "override", "no-any-return"]
+
+[[tool.mypy.overrides]]
+module = "app.utils.s3_client"
+disable_error_code = ["no-any-return"]
+
 [tool.ruff]
 line-length = 80
 target-version = "py310"
