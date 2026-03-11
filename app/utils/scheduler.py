@@ -229,7 +229,7 @@ def follow_submitted_job(
         for line in output_files.stderr_content.splitlines()[-50:]:
             _log(f"  STDERR: {line}")
     if not output_files.stdout_exists:
-        _log(f"Warning: stdout.modelops not found after job completion")
+        _log("Warning: stdout.modelops not found after job completion")
 
     completion_info = get_job_completion_info(job_id)
     if completion_info:

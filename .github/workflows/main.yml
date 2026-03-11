@@ -1,12 +1,10 @@
-name: tests
+name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   test:
@@ -21,20 +19,13 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install the project
-        run: |
-          uv sync --all-extras --dev
-      - name: Runs tests
-        run: |
-          uv run pytest  --cov-report=xml --cov=app ./tests
-      - name: Static type check
-        run: |
-          uv run mypy ./app
-      - name: Linter code check
-        run: |
-          uv run ruff check ./app
-      - name: Sphinx build
-        run: |
-          uv run sphinx-build -M html docs/source docs/build
+        run: uv sync --all-extras --dev
+      - name: Lint
+        run: uv run ruff check ./app
+      - name: Type check
+        run: uv run mypy ./app
+      - name: Unit tests
+        run: uv run pytest tests/ -m "not integration" --cov=app --cov-report=xml
 
   integration-test:
     runs-on: ubuntu-latest
@@ -42,7 +33,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-    
     services:
       localstack:
         image: localstack/localstack:3.0
@@ -57,34 +47,25 @@ jobs:
           --health-timeout 5s
           --health-retries 5
           --health-start-period 10s
-    
     steps:
       - uses: actions/checkout@v4
-      
       - name: Install uv
         uses: astral-sh/setup-uv@v3
-      
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
-      
       - name: Install the project
         run: uv sync --all-extras --dev
-      
       - name: Wait for LocalStack
         run: |
-          timeout 60 bash -c 'until curl -s http://localhost:4566/_localstack/health | grep -q "\"s3\": \"running\""; do echo "Waiting for LocalStack S3..."; sleep 2; done'
-          echo "LocalStack is ready!"
-      
-      - name: Run integration tests
+          timeout 60 bash -c 'until curl -s http://localhost:4566/_localstack/health | grep -q "\"s3\": \"running\""; do echo "Waiting..."; sleep 2; done'
+      - name: Integration tests
         env:
           AWS_ENDPOINT_URL: http://localhost:4566
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
-        run: |
-          uv run pytest tests/integration/ -v -m integration --cov=app.utils.s3 --cov-report=xml --cov-append
-      
-      - name: Upload coverage to Codecov
+        run: uv run pytest tests/integration/ -v -m integration --cov=app.utils.s3 --cov-report=xml --cov-append
+      - name: Upload coverage
         if: matrix.python-version == '3.11'
         uses: codecov/codecov-action@v3
         with:

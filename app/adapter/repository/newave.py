@@ -35,7 +35,6 @@ from app.utils.constants import (
     OUTPUTS_PREFIX,
     PROCESSED_DECK_FILE,
     RAW_DECK_FILE,
-    RAW_OUTPUTS_FILE,
     STATUS_DIAGNOSIS_FILE,
     SYNTHESIS_DIR,
 )

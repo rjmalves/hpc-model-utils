@@ -18,8 +18,8 @@ Usage Example:
 
 """
 
-import zipfile
 import time
+import zipfile
 
 
 class EmptyCompressor(object):

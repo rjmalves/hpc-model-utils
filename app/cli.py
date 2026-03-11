@@ -5,12 +5,12 @@ import click
 from app.adapter.repository.abstractmodel import ModelFactory
 from app.click_types import ModelNameType, PositiveIntType, S3PathType
 from app.error_handler import handle_cli_errors
-from app.utils.timing import time_command
 from app.errors import ValidationError
 from app.utils.constants import MPICH_PATH, RAW_OUTPUTS_FILE, SLURM_PATH
 from app.utils.fs import extract_zip_content
 from app.utils.log import Log
 from app.utils.s3 import check_and_download_bucket_items, path_to_bucket_and_key
+from app.utils.timing import time_command
 from app.validation import (
     validate_cancel_run,
     validate_check_and_fetch_executables,
@@ -28,8 +28,10 @@ from app.validation import (
 
 
 @click.group()
+@click.version_option(package_name="hpc-model-utils")
 def cli():
-    """CLI app for running energy-related models in HPC clusters."""
+    """CLI tool for running energy planning models (NEWAVE, DECOMP, DESSEM)
+    in HPC clusters with SLURM and AWS S3 integration."""
     pass
 
 
