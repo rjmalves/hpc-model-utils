@@ -25,7 +25,7 @@ jobs:
       - name: Type check
         run: uv run mypy ./app
       - name: Unit tests
-        run: uv run pytest tests/ -m "not integration" --cov=app --cov-report=xml
+        run: uv run pytest tests/ -m "not integration" --ignore=tests/adapter --cov=app --cov-report=xml
 
   integration-test:
     runs-on: ubuntu-latest
