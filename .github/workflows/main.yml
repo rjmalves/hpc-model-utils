@@ -48,11 +48,20 @@ jobs:
             -p 4566:4566 \
             -e SERVICES=s3 \
             -e DEBUG=0 \
-            localstack/localstack:4.4
+            localstack/localstack:3.8
       - name: Wait for LocalStack
         run: |
-          timeout 120 bash -c 'until curl -s http://localhost:4566/_localstack/health | grep -q "running"; do echo "Waiting for LocalStack..."; sleep 3; done'
-          echo "LocalStack is ready!"
+          for i in $(seq 1 40); do
+            if curl -s http://localhost:4566/_localstack/health 2>/dev/null | grep -q '"s3"'; then
+              echo "LocalStack is ready!"
+              exit 0
+            fi
+            echo "Waiting for LocalStack... (attempt $i/40)"
+            sleep 3
+          done
+          echo "LocalStack failed to start. Container logs:"
+          docker logs localstack 2>&1 | tail -30
+          exit 1
       - name: Integration tests
         env:
           AWS_ENDPOINT_URL: http://localhost:4566
