@@ -1,52 +1,136 @@
 # hpc-model-utils
-Conjunto de scripts para auxiliar no pré-processamento, execução e pós-processamento de NEWAVE / DECOMP / DESSEM em ambiente HPC, também executando programas auxiliares quando necessário.
 
-A versão atual do `hpc-model-utils` contém scripts para executar os programas NEWAVE e DECOMP em ambiente gerenciado com Sun Grid Engine (SGE) e o modelo DESSEM em ambiente livre, sem gerenciador de filas.
+CLI tool for running energy planning models (NEWAVE, DECOMP, DESSEM) in HPC clusters with SLURM job scheduling and AWS S3 integration.
 
-## Instalação
+## Supported Models
 
-Apesar de ser um módulo `python`, o hpc-model-utils não está disponível nos repositórios oficiais. Para realizar a instalação, é necessário fazer o download do código a partir do repositório e fazer a instalação manualmente:
+| Model  | Input Parser | Output Diagnosis | Postprocessing     |
+| ------ | ------------ | ---------------- | ------------------ |
+| NEWAVE | inewave      | pmo.dat          | nwlistcf, nwlistop |
+| DECOMP | idecomp      | relato, inviab   | -                  |
+| DESSEM | idessem      | DES_LOG_RELATO   | -                  |
 
+## Execution Workflow
+
+The CLI orchestrates each model execution as a sequence of discrete steps, designed to be called by an external scheduler (ModelOps):
+
+1. **check-and-fetch-executables** — Download model binaries from S3
+2. **check-and-fetch-inputs** — Download model input deck from S3
+3. **extract-sanitize-inputs** — Unzip and encoding-sanitize inputs
+4. **preprocess** — Model-specific preprocessing (deck patching, parent data extraction)
+5. **run** — Submit job to SLURM and monitor until completion
+6. **generate-execution-status** — Diagnose run outcome (SUCCESS, INFEASIBLE, DATA_ERROR, RUNTIME_ERROR, COMMUNICATION_ERROR, UNKNOWN)
+7. **postprocess** — Model-specific postprocessing (e.g., nwlistcf/nwlistop for NEWAVE)
+8. **output-compression-and-cleanup** — Parallel ZIP compression of outputs
+9. **result-upload** — Upload results to S3
+
+Additional commands: `cancel-run`, `download-executed-run`, `fetch-extract-raw-outputs`.
+
+## Installation
+
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+
+```bash
+git clone https://github.com/rjmalves/hpc-model-utils.git
+cd hpc-model-utils
+./setup.sh
 ```
-$ git clone https://github.com/marianasnoel/hpc-model-utils
-$ cd hpc-model-utils
-$ pip install -r requirements.txt
+
+The setup script creates a virtual environment, installs dependencies, and symlinks the `hpc-model-utils` command to `~/.local/bin/`.
+
+To force-recreate the environment:
+
+```bash
+./setup.sh --force
 ```
 
-## Funcionalidades Gerais
+### Manual Installation
 
-### Compressão Paralela
+```bash
+uv sync
+uv run hpc-model-utils --version
+```
 
-Uma das funcionalidades fornecidas pelo `hpc-model-utils` é a compressão de arquivos em paralelo para o formato `.zip`. Não existe de maneira fácil um programa de linux que realize paralelismo na compressão de arquivos da maneira que é desejada para acelerar a compressão das saídas dos modelos de planejamento energético, onde existem muitos arquivos de tamanho reduzido e poucos arquivos grandes.
+Or with pip:
 
-Algumas alternativas de compressão como o [pigz](https://zlib.net/pigz/) e [pbzip2](https://linux.die.net/man/1/pbzip2) não são as mais adequadas para o processo, visto que elas realizam paralelismo na compressão de um mesmo arquivo, o que é ineficiente na maioria das vezes e ainda seria lento no caso em questão. Mais sobre a infeciência de paralelizar a compressão de arquivos é encontrado [aqui](https://stackoverflow.com/questions/66989293/parallel-zipping-of-a-single-large-file).
+```bash
+pip install .
+hpc-model-utils --version
+```
 
-Por isso, foi extraída [deste](https://github.com/urishab/ZipFileParallel) repositório aberto uma classe Python para paralelizar a compressão de diversos arquivos. Esta classe foi adaptada para que fosse fornecida uma lista de arquivos e, a partir de um `pool` de processadores que funcionam de maneira assíncrona, fosse escrito em um mesmo arquivo `.zip` o resultado da compressão de cada arquivo da lista, feita de maneira independente por cada processador. Isto se mostrou essencial para lidar com o número de arquivos de saída do modelo NEWAVE individualizado.
+## Usage
 
-## Funcionalidades Disponíveis por Modelo
+```bash
+# Show available commands
+hpc-model-utils --help
 
-### NEWAVE
+# Show version
+hpc-model-utils --version
 
-O modelo NEWAVE é executado pelo `jobs/mpi_newave.job`, que permite declarar tanto o número de cores alocados para a sua execução quanto a versão do modelo a ser utilizada. Uma chamada simples é:
+# Example: fetch inputs from S3
+hpc-model-utils check-and-fetch-inputs \
+  --model-name NEWAVE \
+  --s3-inputs-path s3://bucket/inputs/case-001/ \
+  --target-dir /scratch/case-001/
 
-`qsub -cwd -V -N $CASO -pe orte $NUM_PROC mpi_newave.job $VERSAO $NUM_PROC`
+# Example: submit a SLURM job
+hpc-model-utils run \
+  --model-name NEWAVE \
+  --target-dir /scratch/case-001/ \
+  --queue normal \
+  --core-count 64
 
-São suportados argumentos opcionais que podem ser fornecidos através das palavras-chave `sintetizador` e `posproc`, que são encaminhados para as respectivas etapas durante a execução do job.
+# Example: diagnose execution status
+hpc-model-utils generate-execution-status \
+  --model-name NEWAVE \
+  --target-dir /scratch/case-001/
+```
 
-Todos os argumentos passados após a palavra `sintetizador` são redirecionados para a chamada do [sintetizador-newave](https://github.com/rjmalves/sintetizador-newave), que é feita após a execução dos programas auxiliares NWLISTCF e NWLISTOP. Já os argumentos passados após a palavra `posproc` são redirecionados para o script `pos_processa_newave.py`, que é responsável pela divisão e compactação dos arquivos.
+### Exit Codes
 
-### DECOMP
+| Code | Meaning          |
+| ---- | ---------------- |
+| 0    | Success          |
+| 1    | Model error      |
+| 2    | Validation error |
+| 3    | SLURM error      |
+| 4    | S3 error         |
+| 99   | Unknown error    |
 
-O modelo DECOMP é executado pelo `jobs/mpi_decomp.job`, que permite declarar tanto o número de cores alocados para a sua execução quanto a versão do modelo a ser utilizada. Uma chamada simples é:
+## Development
 
-`qsub -cwd -V -N $CASO -pe orte $NUM_PROC mpi_decomp.job $VERSAO $NUM_PROC`
+```bash
+# Install with dev dependencies
+uv sync --dev
 
-A execução do modelo através deste job script também realiza a chamada ao [sintetizador-decomp](https://github.com/rjmalves/sintetizador-decomp).
+# Run unit tests
+uv run pytest tests/ -m "not integration"
 
-### DESSEM
+# Run with coverage
+uv run pytest tests/ -m "not integration" --cov=app --cov-report=html
 
-O modelo DESSEM é executado pelo `jobs/dessem.sh`, que permite declarar apenas a versão do modelo a ser utilizada. Este script não suporta ambientes de gerenciamento de filas, pois não é o modo atual de uso internamente. Uma chamada simples é:
+# Type checking
+uv run mypy ./app
 
-`./dessem.sh $VERSAO`
+# Linting
+uv run ruff check ./app
+```
 
-A execução do modelo através deste job script também realiza a chamada ao [sintetizador-dessem](https://github.com/rjmalves/sintetizador-dessem).
+### Integration Tests (LocalStack)
+
+Integration tests use [LocalStack](https://localstack.cloud/) for S3 operations without AWS credentials.
+
+```bash
+# Start LocalStack
+docker compose -f docker-compose.localstack.yml up -d
+
+# Run integration tests
+uv run pytest tests/integration/ -v -m integration
+
+# Stop LocalStack
+docker compose -f docker-compose.localstack.yml down
+```
+
+## License
+
+[MIT](LICENSE)

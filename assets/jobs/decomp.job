@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# ONS - ModelOPS
+#
+# .job script for running the DECOMP model in HPC environment,
+# with the SLURM workload manager.
+#
+# It is expected that both MPICH and SLURM binary installation
+# directories are in $PATH (ex. /opt/slurm/bin and /usr/local/mpich/bin)
+#
+
+#
+# Command for invoking using the SLURM manager in the current directory:
+#
+# sbatch --partition=$QUEUE_NAME --contiguous --job-name=`basename $PWD`
+# --output="main.stdout" --error="main.stderr" --ntasks $NUM_CPUS
+#  --cpus-per-task=1 hpc-model-utils/assets/jobs/decomp.job $NUM_CPUS
+#
+
+# This .job is meant to be used together with the hpc-model-utils
+# app and may expect some patterns and business rules to be matched
+
+# Inputs and important variables
+NUM_CPUS=$1
+MODEL_NAME="decomp"
+EXEC="mpiexec"
+DECOMP="./assets/decomp"
+
+if [ $NUM_CPUS -eq 1 ]; then
+    $DECOMP
+else
+    $EXEC -np $NUM_CPUS $DECOMP
+fi

@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install the project
+        run: uv sync --all-extras --dev
+      - name: Lint
+        run: uv run ruff check ./app
+      - name: Type check
+        run: uv run mypy ./app
+      - name: Unit tests
+        run: uv run pytest tests/ -m "not integration" --ignore=tests/adapter --cov=app --cov-report=xml
+
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install the project
+        run: uv sync --all-extras --dev
+      - name: Start LocalStack
+        run: |
+          docker run -d \
+            --name localstack \
+            -p 4566:4566 \
+            -e SERVICES=s3 \
+            -e DEBUG=0 \
+            localstack/localstack:3.8
+      - name: Wait for LocalStack
+        run: |
+          for i in $(seq 1 40); do
+            if curl -s http://localhost:4566/_localstack/health 2>/dev/null | grep -q '"s3"'; then
+              echo "LocalStack is ready!"
+              exit 0
+            fi
+            echo "Waiting for LocalStack... (attempt $i/40)"
+            sleep 3
+          done
+          echo "LocalStack failed to start. Container logs:"
+          docker logs localstack 2>&1 | tail -30
+          exit 1
+      - name: Integration tests
+        env:
+          AWS_ENDPOINT_URL: http://localhost:4566
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+        run: uv run pytest tests/integration/ -v -m integration --cov=app.utils.s3 --cov-report=xml --cov-append
+      - name: Upload coverage
+        if: matrix.python-version == '3.13'
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: integration-tests
+          name: integration-coverage
+      - name: Stop LocalStack
+        if: always()
+        run: docker rm -f localstack || true
