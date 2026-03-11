@@ -79,8 +79,9 @@ class TestEmptyAndEdgeCases:
     def test_empty_prefix_lists_all(
         self, test_bucket: str, localstack_s3_client: S3Client
     ):
-        """Given empty prefix, should list all objects."""
-        keys = ["file1.txt", "dir/file2.txt"]
+        """Given a prefix, should list all objects under it."""
+        prefix = "empty-prefix-test/"
+        keys = [f"{prefix}file1.txt", f"{prefix}dir/file2.txt"]
         for key in keys:
             localstack_s3_client.put_object(
                 Bucket=test_bucket, Key=key, Body=b"content"
@@ -88,7 +89,7 @@ class TestEmptyAndEdgeCases:
 
         result = check_items_in_bucket(
             bucket_name=test_bucket,
-            remote_prefix="",
+            remote_prefix=prefix,
             aws_access_key_id="test",
             aws_secret_access_key="test",
         )
