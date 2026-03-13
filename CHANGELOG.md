@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.1] - 2026-03-13
+
+### Fixed
+
+- Model version extraction in `check_and_fetch_executables` across all models (NEWAVE, DECOMP, DESSEM, GEVAZP) — was registering model name instead of version due to wrong split index
+- Unit tests for NEWAVE and DECOMP repositories updated to match v1.0.0 API signatures (S3 path-based interface)
+- Removed obsolete test references to deleted `generate_unique_input_id` method and renamed constants
+- Fixed test mocks for `run` (mocking `submit_job`/`follow_submitted_job` directly instead of low-level terminal calls)
+- Marked `test_uploads_empty_file` integration test as `xfail` due to LocalStack 3.0 bug with empty PutObject
+
 ## [1.0.0] - 2026-03-11
 
 ### Added

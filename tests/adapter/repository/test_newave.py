@@ -17,7 +17,7 @@ from app.utils.constants import (
     METADATA_FILE,
     METADATA_MODEL_NAME,
     METADATA_MODEL_VERSION,
-    METADATA_PARENT_ID,
+    METADATA_PARENT_PATH,
     METADATA_PARENT_STARTING_DATE,
     METADATA_STATUS,
     METADATA_STUDY_STARTING_DATE,
@@ -35,20 +35,24 @@ from tests.mocks.newave import (
 TEST_VERSION = "1.0"
 TEST_BUCKET = "my-bucket"
 TEST_INPUT = "deck.zip"
-TEST_PARENT_ID = "parent-id"
+TEST_PARENT_PATH = f"s3://{TEST_BUCKET}/executions/parent-id"
 TEST_JOB_ID = "42"
 TEST_QUEUE = "batch"
 TEST_CORE_COUNT = 42
 TEST_DATE = datetime(2025, 1, 1)
 
+TEST_EXECUTABLES_PATH = f"s3://{TEST_BUCKET}/versions/newave/{TEST_VERSION}"
+TEST_INPUTS_PATH = f"s3://{TEST_BUCKET}/ingest/{TEST_INPUT}"
+TEST_OUTPUTS_PATH = f"s3://{TEST_BUCKET}/executions/test-run"
 
 EXECUTABLE_FILES = [
     METADATA_FILE,
-    NEWAVE.LICENSE_FILENAME,
+    NEWAVE.LICENSE_FILENAMES[0],
     NEWAVE.NAMECAST_PROGRAM_NAME,
 ]
 INPUT_FILES = [
     METADATA_FILE,
+    TEST_INPUT,
     NEWAVE.CUT_FILE,
     NEWAVE.RESOURCES_FILE,
     NEWAVE.SIMULATION_FILE,
@@ -128,7 +132,7 @@ def _model_obj() -> NEWAVE:
 )
 def test_newave_check_and_fetch_executables(fetching_executables):
     model = _model_obj()
-    model.check_and_fetch_executables(version=TEST_VERSION, bucket=TEST_BUCKET)
+    model.check_and_fetch_executables(path=TEST_EXECUTABLES_PATH)
     assert METADATA_FILE in listdir()
     with open(METADATA_FILE, "r") as f:
         metadata = json.load(f)
@@ -158,19 +162,17 @@ def test_newave_check_and_fetch_executables(fetching_executables):
 def test_newave_check_and_fetch_inputs(fetching_inputs):
     model = _model_obj()
     model.check_and_fetch_inputs(
-        filename=TEST_INPUT,
-        bucket=TEST_BUCKET,
-        parent_id=TEST_PARENT_ID,
+        path=TEST_INPUTS_PATH,
+        parent_path=TEST_PARENT_PATH,
         delete=True,
     )
     assert METADATA_FILE in listdir()
     with open(METADATA_FILE, "r") as f:
         metadata = json.load(f)
-    assert METADATA_PARENT_ID in metadata
+    assert METADATA_PARENT_PATH in metadata
     assert METADATA_PARENT_STARTING_DATE in metadata
-    assert metadata[METADATA_PARENT_ID] == TEST_PARENT_ID
+    assert metadata[METADATA_PARENT_PATH] == TEST_PARENT_PATH
     assert metadata[METADATA_PARENT_STARTING_DATE] == TEST_DATE.isoformat()
-    assert all([f in listdir() for f in fetching_inputs])
 
 
 @patch("app.adapter.repository.newave.extract_zip_content")
@@ -180,11 +182,13 @@ def test_newave_sanitize_inputs(
     cast_encoding_mock: MagicMock,
     run_terminal_mock: MagicMock,
     extract_mock: MagicMock,
+    run_in_tempdir,
     fetching_inputs,
+    writing_input_mocks,
 ):
     run_terminal_mock.return_value = [0, [None, None]]
     model = _model_obj()
-    model.extract_sanitize_inputs(compressed_input_file=TEST_INPUT)
+    model.extract_sanitize_inputs()
     cast_encoding_mock.assert_called()
     for zip_file, files in EXTRACTING_INPUTS.items():
         assert zip_file in [
@@ -195,17 +199,9 @@ def test_newave_sanitize_inputs(
         ]
 
 
-def test_newave_generate_unique_input_id(run_in_tempdir):
-    model = _model_obj()
-    parent_id = model.generate_unique_input_id(
-        version=TEST_VERSION, parent_id=TEST_PARENT_ID
-    )
-    assert parent_id == "cbde45fdaedd3271434e64e1b0e15145"
-
-
 def test_newave_preprocess(run_in_tempdir, writing_input_mocks):
     model = _model_obj()
-    model.preprocess()
+    model.preprocess(execution_name="test")
 
     caso_obj = Caso.read(NEWAVE.MODEL_ENTRY_FILE)
     assert (
@@ -214,14 +210,15 @@ def test_newave_preprocess(run_in_tempdir, writing_input_mocks):
     )
 
 
-@patch("app.utils.scheduler.run_in_terminal")
+@patch("app.adapter.repository.newave.follow_submitted_job")
+@patch("app.adapter.repository.newave.submit_job")
 def test_newave_run(
-    run_terminal_mock: MagicMock, run_in_tempdir, writing_input_mocks
+    submit_job_mock: MagicMock,
+    follow_job_mock: MagicMock,
+    run_in_tempdir,
+    writing_input_mocks,
 ):
-    run_terminal_mock.return_value = [
-        0,
-        [f"Submitted batch job {TEST_JOB_ID}", ""],
-    ]
+    submit_job_mock.return_value = TEST_JOB_ID
     model = _model_obj()
     model.run(
         queue=TEST_QUEUE,
@@ -231,12 +228,8 @@ def test_newave_run(
     )
     assert MPICH_PATH in environ["PATH"]
     assert SLURM_PATH in environ["PATH"]
-    assert run_terminal_mock.call_count == 2
-    assert (
-        f"--partition={TEST_QUEUE}"
-        in run_terminal_mock.call_args_list[0].args[0]
-    )
-    assert str(TEST_CORE_COUNT) in run_terminal_mock.call_args_list[0].args[0]
+    assert submit_job_mock.call_count == 2
+    assert follow_job_mock.call_count == 2
 
 
 def test_newave_generate_execution_status(run_in_tempdir, writing_input_mocks):
@@ -280,9 +273,5 @@ def test_newave_result_upload(
     writing_input_mocks,
 ):
     model = _model_obj()
-    model.result_upload(
-        compressed_input_file=TEST_INPUT,
-        inputs_bucket=TEST_BUCKET,
-        outputs_bucket=TEST_BUCKET,
-    )
+    model.result_upload(path=TEST_OUTPUTS_PATH)
     file_upload_mock.assert_called()

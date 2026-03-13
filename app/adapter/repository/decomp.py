@@ -176,7 +176,7 @@ class DECOMP(AbstractModel):
         path_data = path_to_bucket_and_key(path)
         bucket = path_data["bucket"]
         key = path_data["key"]
-        version = key.split("/")[-2]
+        version = key.split("/")[-1]
         downloaded_filepaths = check_and_download_bucket_items(
             bucket, MODEL_EXECUTABLE_DIRECTORY, key, self._log
         )
