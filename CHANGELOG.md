@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.2] - 2026-03-20
+
+### Fixed
+
+- Model version extraction in `check_and_fetch_executables` across all models (NEWAVE, DECOMP, DESSEM, GEVAZP) — was registering empty values due to path ending in '/'
+
 ## [1.0.1] - 2026-03-13
 
 ### Fixed
