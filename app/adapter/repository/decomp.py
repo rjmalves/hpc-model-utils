@@ -72,7 +72,12 @@ class DECOMP(AbstractModel):
     MODEL_ENTRY_FILE = "caso.dat"
     NWLISTCF_ENTRY_FILE = "arquivos.dat"
     LIBS_ENTRY_FILE = "indices.csv"
-    LICENSE_FILENAMES = ["decomp.lic", "ddsDECOMP.cep", "decomp.cep"]
+    LICENSE_FILENAMES = [
+        "decomp.lic",
+        "ddsDECOMP.cep",
+        "decomp.cep",
+        "decomp_trial.cep"
+    ]
     CUT_FILE = "cortes.zip"
     RESOURCES_FILE = "recursos.zip"
     SIMULATION_FILE = "simulacao.zip"
