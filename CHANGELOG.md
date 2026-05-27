@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.4] - 2026-05-27
+
+### Fixed
+
+- Cap CPU count for `SYNTHESIS_APP` calls (at physical cores via `lscpu`) and `output_compression_and_cleanup` (at vCPUs via `nproc`) in `newave_post.job` and `decomp_post.job` to avoid resource over-subscription on HPC hosts
+- Add missing `--processadores` flag to `decomp_post.job` synthesis call so it explicitly limits parallelism
+
 ## [1.0.3] - 2026-04-17
 
 ### Fixed
