@@ -26,13 +26,17 @@ MODEL_NAME="decomp"
 STATUS_DIAGNOSIS_FILE="status.modelops"
 UTILS_APP="./hpc-model-utils/venv/bin/hpc-model-utils"
 SYNTHESIS_APP="./sintetizador-decomp/venv/bin/sintetizador-decomp"
+PHYSICAL_CORES=$(lscpu -p=Core,Socket | grep -v '^#' | sort -u | wc -l)
+LOGICAL_CPUS=$(nproc)
+SYNTHESIS_CPUS=$(( NUM_CPUS < PHYSICAL_CORES ? NUM_CPUS : PHYSICAL_CORES ))
+CLEANUP_CPUS=$(( NUM_CPUS < LOGICAL_CPUS ? NUM_CPUS : LOGICAL_CPUS ))
 
 $UTILS_APP generate_execution_status $MODEL_NAME --job-id $SLURM_JOB_ID
 
 # Only does heavy post-processing on successful runs
 if grep -q "SUCCESS" "$STATUS_DIAGNOSIS_FILE"; then
     $UTILS_APP postprocess $MODEL_NAME
-    $SYNTHESIS_APP completa
+    $SYNTHESIS_APP completa --processadores $SYNTHESIS_CPUS
 fi
 
-$UTILS_APP output_compression_and_cleanup $MODEL_NAME $NUM_CPUS
+$UTILS_APP output_compression_and_cleanup $MODEL_NAME $CLEANUP_CPUS
