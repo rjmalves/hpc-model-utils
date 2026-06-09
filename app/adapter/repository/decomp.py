@@ -76,7 +76,7 @@ class DECOMP(AbstractModel):
         "decomp.lic",
         "ddsDECOMP.cep",
         "decomp.cep",
-        "decomp_trial.cep"
+        "decomp_trial.cep",
     ]
     CUT_FILE = "cortes.zip"
     RESOURCES_FILE = "recursos.zip"
@@ -243,16 +243,14 @@ class DECOMP(AbstractModel):
                     parent_bucket, remote_filepath, self._log
                 )
             )
-            if any(
-                [
-                    k not in parent_metadata
-                    for k in [
-                        METADATA_MODEL_NAME,
-                        METADATA_STATUS,
-                        METADATA_STUDY_STARTING_DATE,
-                    ]
+            if any([
+                k not in parent_metadata
+                for k in [
+                    METADATA_MODEL_NAME,
+                    METADATA_STATUS,
+                    METADATA_STUDY_STARTING_DATE,
                 ]
-            ):
+            ]):
                 raise ValueError(
                     f"Parent metadata is incomplete [{parent_metadata}]"
                 )
@@ -413,11 +411,16 @@ class DECOMP(AbstractModel):
         if isfile(self.CUT_HEADER_FILE):
             registro_fc = dadger.fc(tipo="NEWV21")
             if registro_fc is None:
-                self._log.info(f"A {self.CUT_HEADER_FILE} file was found," + 
-                               " but not a FC register")
+                self._log.info(
+                    f"A {self.CUT_HEADER_FILE} file was found,"
+                    + " but not a FC register"
+                )
                 # Delete unused cut files
                 cut_by_stage_files = [f for f in listdir() if "cortes-" in f]
-                all_cut_files = cut_by_stage_files + [self.CUT_HEADER_FILE, self.CUT_FULL_FILE]
+                all_cut_files = cut_by_stage_files + [
+                    self.CUT_HEADER_FILE,
+                    self.CUT_FULL_FILE,
+                ]
                 self._log.info(f"Deleting unused cut files: {all_cut_files}")
                 clean_files(all_cut_files)
             else:
@@ -440,31 +443,25 @@ class DECOMP(AbstractModel):
         dadger.write(self.arquivos_dat.dadger)
 
     def _evaluate_data_error(self, relato: Relato) -> bool:
-        return any(
-            [
-                self.DATA_ERROR_PATTERN in b.data
-                for b in relato.data.of_type(DefaultBlock)
-            ]
-        )
+        return any([
+            self.DATA_ERROR_PATTERN in b.data
+            for b in relato.data.of_type(DefaultBlock)
+        ])
 
     def _evaluate_max_iterations(self, relato: Relato) -> bool:
-        return any(
-            [
-                self.MAX_ITERATIONS_PATTERN in b.data
-                for b in relato.data.of_type(DefaultBlock)
-            ]
-        )
+        return any([
+            self.MAX_ITERATIONS_PATTERN in b.data
+            for b in relato.data.of_type(DefaultBlock)
+        ])
 
     def _evaluate_relato_outputs(self, relato: Relato) -> bool:
         return relato.cmo_medio_submercado is None
 
     def _evaluate_negative_gap(self, relato: Relato) -> bool:
-        return any(
-            [
-                self.NEGATIVE_GAP_PATTERN in b.data
-                for b in relato.data.of_type(DefaultBlock)
-            ]
-        )
+        return any([
+            self.NEGATIVE_GAP_PATTERN in b.data
+            for b in relato.data.of_type(DefaultBlock)
+        ])
 
     def _evaluate_feasibility(
         self, inviab_file: InviabUnic, dadger: Dadger
@@ -572,9 +569,8 @@ class DECOMP(AbstractModel):
         ]
         index_file = [dadger.fa.arquivo] if dadger.fa else []
         libs_input_files = (
-            pd.read_csv(index_file[0], delimiter=";", comment="&", header=None)[
-                2
-            ]
+            pd
+            .read_csv(index_file[0], delimiter=";", comment="&", header=None)[2]
             .unique()
             .tolist()
             if len(index_file) == 1
@@ -636,6 +632,7 @@ class DECOMP(AbstractModel):
         ]
         report_output_file_regex = [
             r"^osl_.*$",
+            r"^deco_.*msg$",
             r"^eco_.*\.csv$",
             r"^dec_fcf_cortes.*$",
             r"^avl_desvfpha_v_q_.*$",
@@ -883,7 +880,9 @@ class DECOMP(AbstractModel):
             cancel_submitted_job(job_id)
             wait_cancelled_job(job_id, JOB_CANCELLATION_TIMEOUT)
 
-    def download_executed_run(self, artifacts_path: str, fetch_inputs: bool = True):
+    def download_executed_run(
+        self, artifacts_path: str, fetch_inputs: bool = True
+    ):
         self._log.info(f"Fetching artifact data in {artifacts_path}...")
 
         if fetch_inputs:
@@ -895,9 +894,7 @@ class DECOMP(AbstractModel):
                 bucket, str(Path(curdir).resolve()), key, self._log
             )
             for filepath in downloaded_filepaths:
-                self._log.info(
-                    f"Downloaded {filepath}"
-                )
+                self._log.info(f"Downloaded {filepath}")
 
         outputs_path = join(artifacts_path, OUTPUTS_PREFIX)
         outputs_path_data = path_to_bucket_and_key(outputs_path)
@@ -907,10 +904,7 @@ class DECOMP(AbstractModel):
             bucket, str(Path(curdir).resolve()), key, self._log
         )
         for filepath in downloaded_filepaths:
-            self._log.info(
-                f"Downloaded {filepath}"
-            )
-
+            self._log.info(f"Downloaded {filepath}")
 
 
 ModelFactory().register(DECOMP.MODEL_NAME, DECOMP)
