@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.5] - 2026-06-09
+
+### Fixed
+
+- Collect `deco_*.msg` files as DECOMP report outputs (were previously excluded from the uploaded outputs)
+
+### Changed
+
+- Bump dependencies to their latest releases: `boto3` 1.43, `click` 8.4, `idecomp` 1.10, `idessem` 1.2, `inewave` 1.13, `boto3-stubs` 1.43, `mypy` 2.1, `pytest-cov` 7.1, `pytest-timeout` 2.4, `requests` 2.34, `ruff` 0.15 (plus refreshed transitive dependencies in `uv.lock`)
+
 ## [1.0.4] - 2026-05-27
 
 ### Fixed

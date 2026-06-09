@@ -1,6 +1,6 @@
 [project]
 name = "hpc-model-utils"
-version = "1.0.4"
+version = "1.0.5"
 description = "CLI tool for running energy planning models (NEWAVE, DECOMP, DESSEM) in HPC clusters with SLURM and AWS S3 integration"
 readme = "README.md"
 license = "MIT"
@@ -25,23 +25,23 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "boto3>=1.35",
-  "click>=8.1",
-  "idecomp>=1.7",
-  "idessem>=0.0.23",
-  "inewave>=1.10",
+  "boto3>=1.43",
+  "click>=8.4",
+  "idecomp>=1.10",
+  "idessem>=1.2",
+  "inewave>=1.13",
   "pytz",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "boto3-stubs[s3]>=1.35",
+  "boto3-stubs[s3]>=1.43",
   "mypy",
   "pytest",
-  "pytest-cov>=6.0",
-  "pytest-timeout>=2.2",
-  "requests>=2.31",
-  "ruff>=0.9",
+  "pytest-cov>=7.1",
+  "pytest-timeout>=2.4",
+  "requests>=2.34",
+  "ruff>=0.15",
 ]
 
 [project.urls]
@@ -64,13 +64,13 @@ include = [
 
 [dependency-groups]
 dev = [
-  "boto3-stubs[s3]>=1.35",
+  "boto3-stubs[s3]>=1.43",
   "mypy",
   "pytest",
-  "pytest-cov>=6.0",
-  "pytest-timeout>=2.2",
-  "requests>=2.31",
-  "ruff>=0.9",
+  "pytest-cov>=7.1",
+  "pytest-timeout>=2.4",
+  "requests>=2.34",
+  "ruff>=0.15",
 ]
 
 [tool.mypy]
