@@ -440,7 +440,7 @@ class DECOMP(AbstractModel):
                 files_to_delete = [f for f in all_cut_files if f != cut_file]
                 self._log.info(f"Deleting unused cut files: {files_to_delete}")
                 clean_files(files_to_delete)
-        dadger.write(self.arquivos_dat.dadger)
+        # dadger.write(self.arquivos_dat.dadger)
 
     def _evaluate_data_error(self, relato: Relato) -> bool:
         return any([
