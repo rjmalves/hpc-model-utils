@@ -208,16 +208,14 @@ class NEWAVE(AbstractModel):
                     parent_bucket, remote_filepath, self._log
                 )
             )
-            if any(
-                [
-                    k not in parent_metadata
-                    for k in [
-                        METADATA_MODEL_NAME,
-                        METADATA_STATUS,
-                        METADATA_STUDY_STARTING_DATE,
-                    ]
+            if any([
+                k not in parent_metadata
+                for k in [
+                    METADATA_MODEL_NAME,
+                    METADATA_STATUS,
+                    METADATA_STUDY_STARTING_DATE,
                 ]
-            ):
+            ]):
                 raise ValueError(
                     f"Parent metadata is incomplete [{parent_metadata}]"
                 )
@@ -587,9 +585,8 @@ class NEWAVE(AbstractModel):
             [self.LIBS_ENTRY_FILE] if self.LIBS_ENTRY_FILE in listdir() else []
         )
         libs_input_files = (
-            pd.read_csv(index_file[0], delimiter=";", comment="&", header=None)[
-                2
-            ]
+            pd
+            .read_csv(index_file[0], delimiter=";", comment="&", header=None)[2]
             .unique()
             .tolist()
             if len(index_file) == 1
@@ -657,6 +654,7 @@ class NEWAVE(AbstractModel):
             "TAREFA.TMP",
             "mensagens.csv",
             "indice_saida.csv",
+            "qprevs-medio-usina.csv",
         ]
         report_output_file_regex = [
             r"^alertainv.*\.rel$",
@@ -960,7 +958,9 @@ class NEWAVE(AbstractModel):
             cancel_submitted_job(job_id)
             wait_cancelled_job(job_id, JOB_CANCELLATION_TIMEOUT)
 
-    def download_executed_run(self, artifacts_path: str, fetch_inputs: bool = True):
+    def download_executed_run(
+        self, artifacts_path: str, fetch_inputs: bool = True
+    ):
         self._log.info(f"Fetching artifact data in {artifacts_path}...")
 
         if fetch_inputs:
@@ -972,9 +972,7 @@ class NEWAVE(AbstractModel):
                 bucket, str(Path(curdir).resolve()), key, self._log
             )
             for filepath in downloaded_filepaths:
-                self._log.info(
-                    f"Downloaded {filepath}"
-                )
+                self._log.info(f"Downloaded {filepath}")
 
         outputs_path = join(artifacts_path, OUTPUTS_PREFIX)
         outputs_path_data = path_to_bucket_and_key(outputs_path)
@@ -984,9 +982,7 @@ class NEWAVE(AbstractModel):
             bucket, str(Path(curdir).resolve()), key, self._log
         )
         for filepath in downloaded_filepaths:
-            self._log.info(
-                f"Downloaded {filepath}"
-            )
+            self._log.info(f"Downloaded {filepath}")
 
 
 ModelFactory().register(NEWAVE.MODEL_NAME, NEWAVE)
