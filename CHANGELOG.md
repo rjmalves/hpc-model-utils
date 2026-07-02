@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.6] - 2026-07-02
+
+### Changed
+
+- Added `qprevs-medio-usina.csv` to the list of NEWAVE files to be processed into `relatorios.zip`
+
 ## [1.0.5] - 2026-06-09
 
 ### Fixed
