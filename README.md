@@ -24,7 +24,50 @@ The CLI orchestrates each model execution as a sequence of discrete steps, desig
 8. **output-compression-and-cleanup** — Parallel ZIP compression of outputs
 9. **result-upload** — Upload results to S3
 
-Additional commands: `cancel-run`, `download-executed-run`, `fetch-extract-raw-outputs`.
+Additional commands: `cancel-run`, `download-executed-run`, `fetch-extract-raw-outputs`, `ingest-offline-run`.
+
+## Offline Run Ingestion
+
+A run executed **offline** (outside the cluster) can be pushed through the same
+postprocessing pipeline as a regular execution. The user uploads their run
+artifacts as three separate ZIP archives — inputs, outputs, and Benders cuts —
+and `ingest-offline-run` receives them as **three explicit S3 object keys**
+(one per archive). The archives may arrive under arbitrary names, so ingestion
+never relies on archive names: the tool downloads all three, extracts them
+together into the working directory, and processes them as a single batch,
+regardless of which file was placed in which archive. The raw input-deck echo
+(`eco_deck.zip`) is then rebuilt from the deck contents (identified by reading
+`caso.dat`/`arquivos.dat`), exactly like a cluster run.
+
+This replaces steps 2–5 (fetch inputs → extract → preprocess → run) with a
+single ingest step. Executables are still fetched (NEWAVE postprocessing runs
+the `nwlistcf`/`nwlistop` binaries), and the model job itself is skipped:
+
+1. **check-and-fetch-executables** — Download model binaries from S3
+2. **ingest-offline-run** — Fetch the three uploaded ZIPs (by object key),
+   extract them together, sanitize encoding, point the process manager at the
+   executables directory, record study metadata, and tag the run as offline
+3. **run `--skip`** — Submit only the post job (status → postprocess →
+   compression), skipping model execution
+4. **result-upload** — Upload results to S3
+
+Offline runs are tagged with an `execution_source = OFFLINE` metadata flag and a
+ModelOps annotation, so they stay distinguishable from cluster executions.
+Currently only NEWAVE implements offline ingestion; other models inherit a
+default that raises `NotImplementedError`.
+
+```bash
+# Ingest an offline NEWAVE run from three explicit S3 object keys
+# (inputs, outputs, Benders cuts)
+hpc-model-utils ingest_offline_run NEWAVE \
+  s3://bucket/ingest/offline-case-001/inputs.zip \
+  s3://bucket/ingest/offline-case-001/outputs.zip \
+  s3://bucket/ingest/offline-case-001/cortes.zip
+
+# Then run only the post job and upload, exactly like a cluster run
+hpc-model-utils run NEWAVE normal 64 --skip
+hpc-model-utils result_upload NEWAVE s3://bucket/executions/offline-case-001/
+```
 
 ## Installation
 

@@ -25,6 +25,12 @@ class AbstractModel(ABC):
     7 - Output data compression, grouping and cleanup
     8 - Result upload to storage service
 
+    As an alternative to steps 2-4, a run executed offline (outside the
+    cluster) may be ingested through `ingest_offline_run`, which fetches the
+    user-provided artifacts (inputs, outputs and Benders cuts) and lays them
+    out in the working directory so that the remaining steps (5-8) run
+    unchanged, as if the model had just executed on the cluster.
+
     """
 
     def __init__(self, logger: Logger) -> None:
@@ -88,6 +94,24 @@ class AbstractModel(ABC):
     @abstractmethod
     def download_executed_run(self, artifacts_path: str, fetch_inputs: bool):
         raise NotImplementedError
+
+    def ingest_offline_run(
+        self, inputs_path: str, outputs_path: str, cortes_path: str
+    ):
+        """
+        Fetch and lay out the artifacts of a run executed offline (outside
+        the cluster) so that the downstream status/postprocess/compression/
+        upload steps can process it as a regular execution.
+
+        The artifacts are provided as three explicit S3 object keys: the
+        inputs archive, the outputs archive and the Benders-cuts archive.
+
+        This is an optional capability: models that do not support offline
+        ingestion inherit this default, which raises NotImplementedError.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support offline run ingestion"
+        )
 
 
 class ModelFactory(metaclass=Singleton):

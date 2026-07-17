@@ -19,6 +19,7 @@ from app.validation import (
     validate_extract_sanitize_inputs,
     validate_fetch_extract_raw_outputs,
     validate_generate_execution_status,
+    validate_ingest_offline_run,
     validate_output_compression_and_cleanup,
     validate_postprocess,
     validate_preprocess,
@@ -246,3 +247,22 @@ def fetch_extract_raw_outputs(outputs_path):
 
 
 cli.add_command(fetch_extract_raw_outputs)
+
+
+@click.command("ingest_offline_run")
+@click.argument("model_name", type=ModelNameType())
+@click.argument("inputs_path", type=S3PathType())
+@click.argument("outputs_path", type=S3PathType())
+@click.argument("cortes_path", type=S3PathType())
+@time_command("ingest_offline_run")
+@handle_cli_errors("ingest_offline_run")
+def ingest_offline_run(model_name, inputs_path, outputs_path, cortes_path):
+    validate_ingest_offline_run(
+        model_name, inputs_path, outputs_path, cortes_path
+    )
+    model_type, logger = _get_model_with_logger(model_name, "ingest_offline_run")
+    model_type.ingest_offline_run(inputs_path, outputs_path, cortes_path)
+    logger.info("Ingested offline run artifacts")
+
+
+cli.add_command(ingest_offline_run)

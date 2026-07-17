@@ -25,6 +25,7 @@ from app.validation import (
     validate_cancel_run,
     validate_download_executed_run,
     validate_fetch_extract_raw_outputs,
+    validate_ingest_offline_run,
 )
 
 # ---------------------------------------------------------------------------
@@ -298,3 +299,36 @@ class TestValidateFetchExtractRawOutputs:
     def test_invalid_missing_key(self):
         with pytest.raises(click.BadParameter, match="s3://"):
             validate_fetch_extract_raw_outputs("s3://bucket-only")
+
+
+# ---------------------------------------------------------------------------
+# validate_ingest_offline_run
+# ---------------------------------------------------------------------------
+
+
+class TestValidateIngestOfflineRun:
+    def test_valid(self):
+        assert (
+            validate_ingest_offline_run(
+                FAKE_MODEL, VALID_S3, VALID_S3, VALID_S3
+            )
+            is None
+        )
+
+    def test_invalid_model_name(self):
+        with pytest.raises(click.BadParameter):
+            validate_ingest_offline_run(
+                "unknown_model", VALID_S3, VALID_S3, VALID_S3
+            )
+
+    def test_invalid_inputs_path_not_s3(self):
+        with pytest.raises(click.BadParameter, match="s3://"):
+            validate_ingest_offline_run(
+                FAKE_MODEL, "relative/path", VALID_S3, VALID_S3
+            )
+
+    def test_invalid_cortes_path_not_s3(self):
+        with pytest.raises(click.BadParameter, match="s3://"):
+            validate_ingest_offline_run(
+                FAKE_MODEL, VALID_S3, VALID_S3, "relative/path"
+            )
