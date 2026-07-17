@@ -214,3 +214,16 @@ def validate_download_executed_run(model_name: str, artifacts_path: str) -> None
 def validate_fetch_extract_raw_outputs(outputs_path: str) -> None:
     """Validate arguments for the fetch_extract_raw_outputs CLI command."""
     validate_s3_path(outputs_path, "outputs_path")
+
+
+def validate_ingest_offline_run(
+    model_name: str,
+    inputs_path: str,
+    outputs_path: str,
+    cortes_path: str,
+) -> None:
+    """Validate arguments for the ingest_offline_run CLI command."""
+    validate_model_name(model_name)
+    validate_s3_path(inputs_path, "inputs_path")
+    validate_s3_path(outputs_path, "outputs_path")
+    validate_s3_path(cortes_path, "cortes_path")

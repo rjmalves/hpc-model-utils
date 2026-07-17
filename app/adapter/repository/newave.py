@@ -19,8 +19,10 @@ from app.utils.commands import ModelOpsCommands
 from app.utils.constants import (
     AWS_ACCESS_KEY_ID_ENV,
     AWS_SECRET_ACCESS_KEY_ENV,
+    EXECUTION_SOURCE_OFFLINE,
     INPUTS_ECHO_PREFIX,
     JOB_CANCELLATION_TIMEOUT,
+    METADATA_EXECUTION_SOURCE,
     METADATA_FILE,
     METADATA_JOB_ID,
     METADATA_MODEL_NAME,
@@ -983,6 +985,127 @@ class NEWAVE(AbstractModel):
         )
         for filepath in downloaded_filepaths:
             self._log.info(f"Downloaded {filepath}")
+
+    def _build_offline_input_echo(self):
+        """Rebuild the raw input-deck archive (``RAW_DECK_FILE``) from the deck
+        contents so ``result_upload`` echoes it, exactly like a cluster run.
+
+        The uploaded archives arrive with arbitrary S3 key names, so the deck
+        files are identified by reading ``caso.dat``/``arquivos.dat`` (their
+        real filenames), not by which archive they came in.
+        """
+        input_files = self._list_input_files()
+        self._log.info(f"Building input echo {RAW_DECK_FILE}")
+        compress_files_to_zip(input_files, RAW_DECK_FILE.rstrip(".zip"))
+
+    def ingest_offline_run(
+        self, inputs_path: str, outputs_path: str, cortes_path: str
+    ):
+        with time_and_log("Ingesting offline run", logger=self._log):
+            # Each artifact is an explicit S3 object key (inputs, outputs and
+            # Benders cuts). We download all three; their contents are later
+            # extracted and processed together, so the roles do not affect
+            # processing beyond being the download list.
+            downloaded_zips: list[str] = []
+            for artifact_path in [inputs_path, outputs_path, cortes_path]:
+                self._log.info(f"Fetching offline artifact {artifact_path}...")
+                path_data = path_to_bucket_and_key(artifact_path)
+                bucket = path_data["bucket"]
+                key = path_data["key"]
+                downloaded_filepaths = check_and_download_bucket_items(
+                    bucket, str(Path(curdir).resolve()), key, self._log
+                )
+                downloaded_zips += [
+                    Path(p).name
+                    for p in downloaded_filepaths
+                    if p.endswith(".zip")
+                ]
+            self._log.info(f"Downloaded offline artifacts: {downloaded_zips}")
+
+            # Extracts every uploaded archive into the working directory. The
+            # archives arrive with arbitrary names (inputs, outputs and Benders
+            # cuts), so we extract them all together and process them as a
+            # single batch, regardless of which file was placed in which one.
+            for zip_name in downloaded_zips:
+                extracted = extract_zip_content(zip_name)
+                self._log.info(
+                    f"Extracted {len(extracted)} files from {zip_name}"
+                )
+
+            # Drops the source archives now that their contents are extracted,
+            # to avoid leaving the arbitrarily-named zips in the working dir.
+            stale_archives = [z for z in downloaded_zips if isfile(z)]
+            if stale_archives:
+                self._log.info(f"Removing source archives: {stale_archives}")
+                clean_files(stale_archives)
+
+            # Standardizes filenames the same way a cluster run would.
+            code, _ = run_in_terminal(
+                [join(MODEL_EXECUTABLE_DIRECTORY, self.NAMECAST_PROGRAM_NAME)],
+                log_output=True,
+            )
+            if code != 0:
+                self._log.warning(
+                    f"Running {self.NAMECAST_PROGRAM_NAME} resulted in:"
+                )
+
+            # Forces encoding to utf-8 (binary files are detected and skipped).
+            self._log.info("Forcing encoding to utf-8")
+            for f in listdir():
+                if f in self.LICENSE_FILENAMES:
+                    self._log.info(f"Ignoring license file: {f}")
+                    continue
+                cast_encoding_to_utf8(f)
+
+            # Copies license file (needed to run nwlistcf/nwlistop later).
+            for license_filename in self.LICENSE_FILENAMES:
+                license_path = join(
+                    MODEL_EXECUTABLE_DIRECTORY, license_filename
+                )
+                if isfile(license_path):
+                    move(license_path, join(curdir, license_filename))
+                    self._log.info(
+                        f"Moved {license_filename} to executables dir"
+                    )
+
+            # Preserves the raw input deck as the input echo before mutating
+            # caso.dat, mirroring a cluster run's eco_deck.zip.
+            self._build_offline_input_echo()
+
+            # Points the process manager to the executables directory so the
+            # postprocessing binaries (nwlistcf/nwlistop) run correctly. Unlike
+            # preprocess, the study name is preserved from the offline deck.
+            executables_path = str(Path(MODEL_EXECUTABLE_DIRECTORY).resolve())
+            self._log.info(
+                f"Updating 'caso.dat' input with: {executables_path}/"
+            )
+            self.caso_dat.gerenciador_processos = executables_path + "/"
+            self.caso_dat.write(self.MODEL_ENTRY_FILE)
+
+            study_name = self.dger.nome_caso
+            study_year = self.dger.ano_inicio_estudo
+            study_month = self.dger.mes_inicio_estudo
+            if not study_year:
+                raise ValueError("Study year not found in <dger.dat>")
+            if not study_month:
+                raise ValueError("Study month not found in <dger.dat>")
+            study_starting_date = datetime(
+                study_year, study_month, 1, tzinfo=UTC
+            )
+
+            metadata = {
+                METADATA_MODEL_NAME: self.MODEL_NAME.upper(),
+                METADATA_STUDY_STARTING_DATE: study_starting_date.isoformat(),
+                METADATA_STUDY_NAME: study_name if study_name else "",
+                METADATA_EXECUTION_SOURCE: EXECUTION_SOURCE_OFFLINE,
+            }
+            self._update_metadata(metadata)
+            for key, value in metadata.items():
+                ModelOpsCommands.set_metadata(key=key, value=value)
+            ModelOpsCommands.set_annotation(
+                "Imported offline run (not executed on the cluster)"
+            )
+            self._log.info("Offline run artifacts successfully ingested!")
 
 
 ModelFactory().register(NEWAVE.MODEL_NAME, NEWAVE)

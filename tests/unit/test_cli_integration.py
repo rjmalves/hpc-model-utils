@@ -132,3 +132,49 @@ class TestHappyPath:
 
         assert result.exit_code == 0
         mock_model.extract_sanitize_inputs.assert_called_once()
+
+    def test_ingest_offline_run_exits_zero_on_success(
+        self, runner: CliRunner, mock_logger: MagicMock
+    ) -> None:
+        from unittest.mock import patch
+
+        mock_model = MagicMock()
+        mock_model.ingest_offline_run.return_value = None
+
+        with patch(
+            "app.cli.ModelFactory.factory", return_value=mock_model
+        ), patch("app.cli.Log.configure_logger", return_value=mock_logger):
+            result = runner.invoke(
+                cli,
+                [
+                    "ingest_offline_run",
+                    FAKE_MODEL,
+                    VALID_S3,
+                    VALID_S3,
+                    VALID_S3,
+                ],
+            )
+
+        assert result.exit_code == 0
+        mock_model.ingest_offline_run.assert_called_once_with(
+            VALID_S3, VALID_S3, VALID_S3
+        )
+
+    def test_ingest_offline_run_rejects_non_s3_path(
+        self, runner: CliRunner
+    ) -> None:
+        result = runner.invoke(
+            cli,
+            ["ingest_offline_run", FAKE_MODEL, "not-s3-path", VALID_S3, VALID_S3],
+        )
+
+        assert result.exit_code == 2
+
+    def test_ingest_offline_run_requires_all_three_keys(
+        self, runner: CliRunner
+    ) -> None:
+        result = runner.invoke(
+            cli, ["ingest_offline_run", FAKE_MODEL, VALID_S3, VALID_S3]
+        )
+
+        assert result.exit_code == 2

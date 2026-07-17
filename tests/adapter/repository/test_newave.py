@@ -14,6 +14,8 @@ from inewave.newave import Caso
 from app.adapter.repository.newave import NEWAVE
 from app.models.runstatus import RunStatus
 from app.utils.constants import (
+    EXECUTION_SOURCE_OFFLINE,
+    METADATA_EXECUTION_SOURCE,
     METADATA_FILE,
     METADATA_MODEL_NAME,
     METADATA_MODEL_VERSION,
@@ -23,6 +25,7 @@ from app.utils.constants import (
     METADATA_STUDY_STARTING_DATE,
     MODEL_EXECUTABLE_DIRECTORY,
     MPICH_PATH,
+    RAW_DECK_FILE,
     SLURM_PATH,
 )
 from tests.mocks.newave import (
@@ -275,3 +278,82 @@ def test_newave_result_upload(
     model = _model_obj()
     model.result_upload(path=TEST_OUTPUTS_PATH)
     file_upload_mock.assert_called()
+
+
+@patch("app.adapter.repository.newave.check_and_download_bucket_items")
+@patch("app.adapter.repository.newave.extract_zip_content")
+@patch("app.adapter.repository.newave.run_in_terminal")
+@patch("app.adapter.repository.newave.cast_encoding_to_utf8")
+def test_newave_ingest_offline_run(
+    cast_encoding_mock: MagicMock,
+    run_terminal_mock: MagicMock,
+    extract_mock: MagicMock,
+    download_mock: MagicMock,
+    run_in_tempdir,
+    writing_input_mocks,
+):
+    # The user uploads three archives (inputs, outputs and Benders cuts) as
+    # three explicit S3 object keys that arrive with arbitrary names —
+    # ingestion must not depend on the archive names.
+    offline_zips = ["a1b2c3.zip", "d4e5f6.zip", "97g8h9.zip"]
+    for zip_name in offline_zips:
+        with open(zip_name, "w") as f:
+            f.write("{ }")
+    # One download call per object key, each returning its archive.
+    download_mock.side_effect = [[z] for z in offline_zips]
+    extract_mock.return_value = []
+    run_terminal_mock.return_value = [0, [None, None]]
+
+    model = _model_obj()
+    model.ingest_offline_run(
+        inputs_path=f"s3://{TEST_BUCKET}/ingest/run1/{offline_zips[0]}",
+        outputs_path=f"s3://{TEST_BUCKET}/ingest/run1/{offline_zips[1]}",
+        cortes_path=f"s3://{TEST_BUCKET}/ingest/run1/{offline_zips[2]}",
+    )
+
+    # One download per key; every uploaded archive is extracted.
+    assert download_mock.call_count == len(offline_zips)
+    assert extract_mock.call_count == len(offline_zips)
+    cast_encoding_mock.assert_called()
+
+    # Provenance and study metadata are recorded.
+    assert METADATA_FILE in listdir()
+    with open(METADATA_FILE, "r") as f:
+        metadata = json.load(f)
+    assert metadata[METADATA_EXECUTION_SOURCE] == EXECUTION_SOURCE_OFFLINE
+    assert metadata[METADATA_MODEL_NAME] == NEWAVE.MODEL_NAME.upper()
+    assert METADATA_STUDY_STARTING_DATE in metadata
+
+    # The raw input deck is rebuilt as the input echo (from the deck contents,
+    # not from any named archive), and the source archives are removed.
+    assert isfile(RAW_DECK_FILE)
+    for zip_name in offline_zips:
+        assert not isfile(zip_name)
+
+
+def test_newave_ingest_offline_run_default_not_implemented():
+    from logging import getLogger
+
+    from app.adapter.repository.abstractmodel import AbstractModel
+
+    class _BareModel(AbstractModel):
+        def check_and_fetch_executables(self, path): ...
+        def check_and_fetch_inputs(self, path, parent_path, delete=True): ...
+        def extract_sanitize_inputs(self): ...
+        def preprocess(self, execution_name): ...
+        def run(self, *args, **kwargs): ...
+        def generate_execution_status(self, job_id) -> str:
+            return ""
+        def postprocess(self): ...
+        def output_compression_and_cleanup(self, num_cpus): ...
+        def result_upload(self, path): ...
+        def cancel_run(self, job_id, slurm_path): ...
+        def download_executed_run(self, artifacts_path, fetch_inputs): ...
+
+    model = _BareModel(logger=getLogger("test"))
+    with pytest.raises(NotImplementedError):
+        model.ingest_offline_run(
+            "s3://bucket/in.zip",
+            "s3://bucket/out.zip",
+            "s3://bucket/cortes.zip",
+        )

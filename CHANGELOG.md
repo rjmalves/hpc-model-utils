@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.0] - 2026-07-17
+
+### Added
+
+- `ingest_offline_run` command (NEWAVE): ingests a run executed offline (outside the cluster) from three explicit S3 object keys — the inputs, outputs and Benders-cuts archives. The archives may arrive under arbitrary names, so ingestion does not depend on archive names: it downloads all three, extracts them together into the working directory, standardizes filenames and encoding, rebuilds the raw input-deck echo (`eco_deck.zip`) from the deck contents, points the process manager at the executables directory, and records study metadata. This lets an offline run flow through the same downstream steps (`generate_execution_status` → `postprocess` → `output_compression_and_cleanup` → `result_upload`) via `run --skip`, as if it had executed on the cluster.
+- Offline runs are marked with an `execution_source = OFFLINE` metadata flag and a ModelOps annotation so they remain distinguishable from cluster executions.
+
 ## [1.0.6] - 2026-07-02
 
 ### Changed
