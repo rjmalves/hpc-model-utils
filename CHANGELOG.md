@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+
+## [1.1.1] - 2026-07-21
+
+### Added
+
+- Added insurance to avoid resource scarcity while creating new threads in `newave_post.job` and `decomp_post.job`
+
 ## [1.1.0] - 2026-07-17
 
 ### Added
