@@ -20,6 +20,11 @@
 # This .job is meant to be used together with the hpc-model-utils
 # app and may expect some patterns and business rules to be matched
 
+# Cheap insurance
+ulimit -u unlimited 2>/dev/null || ulimit -u 65535 2>/dev/null || true
+export POLARS_MAX_THREADS=1 RAYON_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+       OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+
 # Inputs and important variables
 NUM_CPUS=$1
 MODEL_NAME="newave"
