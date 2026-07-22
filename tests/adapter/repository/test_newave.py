@@ -235,6 +235,32 @@ def test_newave_run(
     assert follow_job_mock.call_count == 2
 
 
+@patch("app.adapter.repository.newave.follow_submitted_job")
+@patch("app.adapter.repository.newave.submit_job")
+def test_newave_run_offline_skips_model(
+    submit_job_mock: MagicMock,
+    follow_job_mock: MagicMock,
+    run_in_tempdir,
+):
+    # A run ingested from an offline execution is tagged in the metadata
+    # file. `run` must detect the tag and submit only the post job, without
+    # requiring the external scheduler to pass an explicit `--skip`.
+    with open(METADATA_FILE, "w") as f:
+        json.dump({METADATA_EXECUTION_SOURCE: EXECUTION_SOURCE_OFFLINE}, f)
+    submit_job_mock.return_value = TEST_JOB_ID
+    model = _model_obj()
+    model.run(
+        queue=TEST_QUEUE,
+        core_count=TEST_CORE_COUNT,
+        mpich_path=MPICH_PATH,
+        slurm_path=SLURM_PATH,
+    )
+    assert submit_job_mock.call_count == 1
+    assert follow_job_mock.call_count == 1
+    submitted_job = submit_job_mock.call_args.args[2]
+    assert submitted_job == NEWAVE.NEWAVE_POST_JOB_PATH
+
+
 def test_newave_generate_execution_status(run_in_tempdir, writing_input_mocks):
     model = _model_obj()
     status = model.generate_execution_status(job_id=TEST_JOB_ID)

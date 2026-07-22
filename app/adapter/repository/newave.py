@@ -137,13 +137,23 @@ class NEWAVE(AbstractModel):
             self.DECK_DATA_CACHING[name] = Pmo.read(filename)
         return self.DECK_DATA_CACHING[name]
 
-    def _update_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
+    def _read_metadata(self) -> dict[str, Any]:
         if isfile(METADATA_FILE):
             with open(METADATA_FILE, "r") as f:
-                metadata = {**json.load(f), **metadata}
+                return json.load(f)
+        return {}
+
+    def _update_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
+        metadata = {**self._read_metadata(), **metadata}
         with open(METADATA_FILE, "w") as f:
             json.dump(metadata, f)
         return metadata
+
+    def _is_offline_run(self) -> bool:
+        """Whether the working directory holds a run ingested from an offline
+        execution, as recorded by `ingest_offline_run` in the metadata file."""
+        source = self._read_metadata().get(METADATA_EXECUTION_SOURCE)
+        return source == EXECUTION_SOURCE_OFFLINE
 
     def check_and_fetch_executables(self, path: str):
         self._log.info(f"Fetching executables in {path}...")
@@ -352,6 +362,13 @@ class NEWAVE(AbstractModel):
     ):
         self._log.info(f"Job script file: {self.NEWAVE_JOB_PATH}")
         environ["PATH"] += ":" + ":".join([mpich_path, slurm_path])
+        if not skip_model and self._is_offline_run():
+            self._log.info(
+                "Offline-ingested run detected "
+                f"({METADATA_EXECUTION_SOURCE}={EXECUTION_SOURCE_OFFLINE}); "
+                "skipping model execution and submitting only the post job"
+            )
+            skip_model = True
         jobs_to_run = (
             [self.NEWAVE_JOB_PATH, self.NEWAVE_POST_JOB_PATH]
             if not skip_model

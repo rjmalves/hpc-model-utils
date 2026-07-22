@@ -47,14 +47,18 @@ the `nwlistcf`/`nwlistop` binaries), and the model job itself is skipped:
 2. **ingest-offline-run** — Fetch the three uploaded ZIPs (by object key),
    extract them together, sanitize encoding, point the process manager at the
    executables directory, record study metadata, and tag the run as offline
-3. **run `--skip`** — Submit only the post job (status → postprocess →
-   compression), skipping model execution
+3. **run** — Submit only the post job (status → postprocess → compression).
+   `run` detects the offline tag recorded in step 2 and skips model execution
+   automatically, so the external scheduler drives an offline run with the same
+   `run` invocation as a cluster run — no `--skip` flag required.
 4. **result-upload** — Upload results to S3
 
 Offline runs are tagged with an `execution_source = OFFLINE` metadata flag and a
-ModelOps annotation, so they stay distinguishable from cluster executions.
-Currently only NEWAVE implements offline ingestion; other models inherit a
-default that raises `NotImplementedError`.
+ModelOps annotation, so they stay distinguishable from cluster executions. The
+same flag is what `run` reads to skip the model job; the `--skip` flag remains
+available as an explicit override for other scenarios. Currently only NEWAVE
+implements offline ingestion; other models inherit a default that raises
+`NotImplementedError`.
 
 ```bash
 # Ingest an offline NEWAVE run from three explicit S3 object keys
@@ -64,8 +68,9 @@ hpc-model-utils ingest_offline_run NEWAVE \
   s3://bucket/ingest/offline-case-001/outputs.zip \
   s3://bucket/ingest/offline-case-001/cortes.zip
 
-# Then run only the post job and upload, exactly like a cluster run
-hpc-model-utils run NEWAVE normal 64 --skip
+# Then run and upload, exactly like a cluster run. The model job is skipped
+# automatically because the run was tagged offline during ingestion.
+hpc-model-utils run NEWAVE normal 64
 hpc-model-utils result_upload NEWAVE s3://bucket/executions/offline-case-001/
 ```
 
