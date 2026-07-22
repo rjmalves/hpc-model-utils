@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.2] - 2026-07-22
+
+### Fixed
+
+- Offline-ingested NEWAVE runs no longer execute the full model. `run` now reads the `execution_source = OFFLINE` flag recorded by `ingest_offline_run` and submits only the post job (status → postprocess → compression), so an offline run driven by the external scheduler skips model execution without requiring an explicit `--skip` flag. The `--skip` flag remains available as an override.
 
 ## [1.1.1] - 2026-07-21
 
