@@ -152,7 +152,7 @@ def test_decomp_check_and_fetch_executables(fetching_executables):
         METADATA_STUDY_STARTING_DATE: TEST_DATE.isoformat(),
     }),
 )
-def test_decomp_check_and_fetch_inputs(fetching_inputs):
+def test_decomp_check_and_fetch_inputs(run_in_tempdir, fetching_inputs):
     model = _model_obj()
     model.check_and_fetch_inputs(
         path=TEST_INPUTS_PATH,
