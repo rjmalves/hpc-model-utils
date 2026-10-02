@@ -4,6 +4,7 @@ v2 CLI root group and fatal-path chokepoint (ticket-017).
 
 from __future__ import annotations
 
+import io
 import logging
 import subprocess
 import sys
@@ -20,6 +21,7 @@ from hpc_model_utils.cli.root import (
     _emits_terminal_status,
     _fatal_path,
     _map_failure,
+    _PipeAwareStreamHandler,
     _scrub_url_query,
     _warn_if_platform_disabled,
     cli,
@@ -218,6 +220,55 @@ def test_configure_logging_uses_loglevel_env_override(
     configure_logging()
 
     assert logging.getLogger("hpc_model_utils").level == logging.DEBUG
+
+
+# ---------------------------------------------------------------------------
+# _PipeAwareStreamHandler: R45 amendment -- a BrokenPipeError propagates so
+# D2 can see it; every other handleError failure keeps the default.
+# ---------------------------------------------------------------------------
+
+
+class _RaisingStream(io.StringIO):
+    def __init__(self, exc: BaseException) -> None:
+        super().__init__()
+        self._exc = exc
+
+    def write(self, s: str) -> int:
+        raise self._exc
+
+
+@pytest.fixture
+def _pipe_aware_logger() -> Iterator[logging.Logger]:
+    logger = logging.getLogger("hpc_model_utils_test.pipe_aware")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    yield logger
+    logger.handlers = []
+
+
+def test_pipe_aware_stream_handler_broken_pipe_write_propagates_empty_stderr(
+    _pipe_aware_logger: logging.Logger,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    handler = _PipeAwareStreamHandler(_RaisingStream(BrokenPipeError("boom")))
+    _pipe_aware_logger.addHandler(handler)
+
+    with pytest.raises(BrokenPipeError, match="boom"):
+        _pipe_aware_logger.info("hello")
+
+    assert capsys.readouterr().err == ""
+
+
+def test_pipe_aware_stream_handler_other_error_uses_default_handle_error(
+    _pipe_aware_logger: logging.Logger,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    handler = _PipeAwareStreamHandler(_RaisingStream(ValueError("bad stream")))
+    _pipe_aware_logger.addHandler(handler)
+
+    _pipe_aware_logger.info("hello")  # must not raise
+
+    assert "--- Logging error ---" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------

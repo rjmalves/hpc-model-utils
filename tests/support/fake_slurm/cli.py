@@ -19,6 +19,12 @@ def write_script(tmp_path: Path, name: str, body: str) -> Path:
     return script
 
 
+def write_executable_stub(bin_dir: Path, name: str, body: str) -> None:
+    stub = bin_dir / name
+    stub.write_text(f"#!/bin/bash\n{body}\n")
+    stub.chmod(0o755)
+
+
 def sbatch(
     *args: str, cwd: Path | None = None
 ) -> subprocess.CompletedProcess[str]:

@@ -108,13 +108,16 @@ class Reporter:
     def duration(self, command: str, seconds: float) -> None:
         self.metadata(f"duration_seconds.{command}", f"{seconds:.2f}")
 
-    def artifacts_path(self, uri: str) -> None:
+    def check_artifacts_path(self, uri: str) -> None:
         if not _ARTIFACTS_URI_PATTERN.fullmatch(uri):
             raise ValueError(f"invalid artifacts uri: {uri!r}")
         if find_platform_identifiers(uri):
             raise ValueError(
                 f"artifacts uri collides with a platform identifier: {uri!r}"
             )
+
+    def artifacts_path(self, uri: str) -> None:
+        self.check_artifacts_path(uri)
         if self._artifacts_emitted:
             logger.debug("artifacts path already emitted; dropping")
             return

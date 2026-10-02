@@ -18,12 +18,14 @@ import re
 import sys
 import time
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TextIO
 
 import click
 
 from hpc_model_utils.core.diagnosis import RunStatus
 from hpc_model_utils.core.errors import ExitCode, Failure, classify
+from hpc_model_utils.core.settings import EngineSettings
 from hpc_model_utils.platform.modelops import Reporter
 from hpc_model_utils.platform.stdio import StdioChannels, install, write_fatal
 
@@ -41,6 +43,7 @@ class AppContext:
     reporter: Reporter
     channels: StdioChannels | None
     command_name: str = ""
+    settings: EngineSettings = field(default_factory=EngineSettings)
 
 
 class HpcmuCommand(click.Command):
@@ -148,8 +151,24 @@ cli = HpcmuGroup(name="cli")
 cli = click.version_option(package_name="hpc-model-utils")(cli)
 
 
+class _PipeAwareStreamHandler(logging.StreamHandler[TextIO]):
+    """R45 amendment (2026-10-02): re-raise an in-flight
+    ``BrokenPipeError`` instead of letting ``StreamHandler.handleError``
+    swallow it into a ``--- Logging error ---`` traceback on stderr, so
+    D2's broken-pipe path (``core.lifecycle.signals.cancel_on_
+    termination``) actually sees it. Every other ``emit()`` failure
+    keeps the default ``handleError`` behaviour.
+    """
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        exc = sys.exc_info()[1]
+        if isinstance(exc, BrokenPipeError):
+            raise exc
+        super().handleError(record)
+
+
 def configure_logging() -> None:
-    handler = logging.StreamHandler(sys.stdout)
+    handler = _PipeAwareStreamHandler(sys.stdout)
     handler.setFormatter(
         logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     )
@@ -205,8 +224,7 @@ def _fatal_path(
     every externally-facing step contained so it cannot fail open.
     """
     failure = _map_failure(exc)
-    command = ctx.command_name
-    command_label = command or "-"
+    command_label = ctx.command_name or "-"
     message = _scrub_url_query(failure.message)
 
     if emits_terminal_status and not ctx.reporter.terminal_emitted:
@@ -248,6 +266,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     reporter = Reporter.from_env(channels.protocol)
     ctx = AppContext(reporter=reporter, channels=channels)
     try:
+        # Amendment (2026-10-02): built inside the try so an invalid
+        # HPCMU_* override (EngineSettings.from_env() raises UsageError)
+        # is caught by this same fatal path, never a bare traceback.
+        ctx.settings = EngineSettings.from_env()
         result = cli.main(
             args=argv,
             prog_name="hpc-model-utils",
@@ -261,3 +283,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             emits_terminal_status=_emits_terminal_status(ctx.command_name),
         )
     return result if isinstance(result, int) else 0
+
+
+# ticket-036: registers the hidden `finalize` command on `cli` by import
+# side effect. Imported here, after `cli`/`HpcmuCommand`/`AppContext`
+# are defined, because `cli.finalize` imports them back from this same
+# module -- a top-of-file import would be a real cycle.
+import hpc_model_utils.cli.finalize  # noqa: E402,F401

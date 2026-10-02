@@ -110,12 +110,17 @@ def update_job(
     state_dir: Path,
     job_id: int,
     mutator: Callable[[dict[str, Any]], dict[str, Any] | None],
-) -> None:
+) -> dict[str, Any]:
+    """Apply ``mutator`` under the lock and return the *pre-mutation*
+    job, so a caller that must act on the job's state (e.g. ``_scancel``
+    signalling its pgid) can do so only after the new state is already
+    durably written, instead of signalling first and mutating after."""
     with locked(state_dir):
         job = read_job(state_dir, job_id)
         updated = mutator(job)
         if updated is not None:
             write_job_atomic(state_dir, job_id, updated)
+    return job
 
 
 def next_job_id(state_dir: Path) -> int:
@@ -634,8 +639,16 @@ def _scancel(args: list[str], state_dir: Path) -> int:
     exit_code = 0
     for raw_id in args:
         job_id = int(raw_id)
+        # Mirrors real Slurm: slurmctld records CANCELLED *before* the
+        # signal goes out, so a job that exits (or completes) in the
+        # window between the two always ends CANCELLED, never
+        # COMPLETED/FAILED. `update_job` returns the pre-mutation job,
+        # read under the same lock that just wrote the new state, so
+        # the "was it RUNNING, and what was its pgid" check below is
+        # the one atomic snapshot that preceded the write -- not a
+        # separate, pre-lock read that could race the mutation.
         try:
-            job = read_job(state_dir, job_id)
+            before = update_job(state_dir, job_id, _cancel_mutator(uid))
         except FileNotFoundError:
             print(
                 "scancel: error: Kill job error on job id "
@@ -644,10 +657,9 @@ def _scancel(args: list[str], state_dir: Path) -> int:
             )
             exit_code = 1
             continue
-        if job["state"] == "RUNNING":
+        if before["state"] == "RUNNING":
             with contextlib.suppress(ProcessLookupError):
-                os.killpg(job["pgid"], signal.SIGTERM)
-        update_job(state_dir, job_id, _cancel_mutator(uid))
+                os.killpg(before["pgid"], signal.SIGTERM)
     return exit_code
 
 

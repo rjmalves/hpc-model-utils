@@ -14,12 +14,15 @@ from pathlib import Path
 
 from hpc_model_utils.core.diagnosis import Diagnosis
 from hpc_model_utils.core.errors import StateFormatError, UsageError
+from hpc_model_utils.core.outputs import RealizedOutputs
 from hpc_model_utils.core.workspace import Phase, Workspace
 
 logger = logging.getLogger(__name__)
 
 STATE_KIND = "hpcmu.state"
 STATE_SCHEMA_VERSION = 1
+FINALIZE_KIND = "hpcmu.finalize"
+FINALIZE_SCHEMA_VERSION = 1
 
 
 class ExecutionSource(enum.StrEnum):
@@ -74,6 +77,17 @@ class StepRecord:
     finished_at: str
     duration_seconds: float
     outcome: str
+
+
+def _step_record_to_dict(step: StepRecord) -> dict[str, object]:
+    return {
+        "command": step.command,
+        "host": step.host,
+        "started_at": step.started_at,
+        "finished_at": step.finished_at,
+        "duration_seconds": step.duration_seconds,
+        "outcome": step.outcome,
+    }
 
 
 _TOP_LEVEL_KEYS = frozenset(
@@ -360,17 +374,7 @@ class RunState:
             "diagnosis": None
             if self.diagnosis is None
             else self.diagnosis.to_dict(),
-            "steps": [
-                {
-                    "command": step.command,
-                    "host": step.host,
-                    "started_at": step.started_at,
-                    "finished_at": step.finished_at,
-                    "duration_seconds": step.duration_seconds,
-                    "outcome": step.outcome,
-                }
-                for step in self.steps
-            ],
+            "steps": [_step_record_to_dict(step) for step in self.steps],
         }
 
     @classmethod
@@ -523,31 +527,35 @@ def write_projections(
         write_atomic(ws.legacy_status_path, status.encode("ascii"))
 
 
+def _read_json_document(path: Path, label: str) -> dict[str, object] | None:
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise StateFormatError(f"{label} is not valid UTF-8: {exc}") from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise StateFormatError(f"{label} is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise StateFormatError(
+            f"{label} top-level value must be an object, got "
+            f"{type(data).__name__}"
+        )
+    return data
+
+
 class StateStore:
     def __init__(self, ws: Workspace) -> None:
         self._ws = ws
 
     def load(self) -> RunState | None:
-        try:
-            raw = self._ws.state_path.read_bytes()
-        except FileNotFoundError:
+        data = _read_json_document(self._ws.state_path, "state.json")
+        if data is None:
             return None
-        try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise StateFormatError(
-                f"state.json is not valid UTF-8: {exc}"
-            ) from exc
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise StateFormatError(
-                f"state.json is not valid JSON: {exc}"
-            ) from exc
-        if not isinstance(data, dict):
-            raise StateFormatError(
-                f"state.json top-level value must be an object, got {type(data).__name__}"
-            )
         return RunState.from_dict(data)
 
     def save(self, state: RunState) -> None:
@@ -573,3 +581,196 @@ class StateStore:
 
     def load_optional(self) -> RunState | None:
         return self.load()
+
+
+_FINALIZE_TOP_LEVEL_KEYS = frozenset(
+    {
+        "kind",
+        "schema_version",
+        "run_id",
+        "diagnosis",
+        "postprocess",
+        "synthesis",
+        "outputs",
+        "steps",
+    }
+)
+
+
+def _bool_field(data: Mapping[str, object], key: str, path: str) -> bool:
+    value = _field(data, key, path)
+    if not isinstance(value, bool):
+        raise StateFormatError(
+            f"{_join(path, key)}: must be bool, got {type(value).__name__}"
+        )
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class StepOutcome:
+    name: str
+    ok: bool
+    detail: str
+    duration_seconds: float
+
+
+def _step_outcome_to_dict(outcome: StepOutcome) -> dict[str, object]:
+    return {
+        "name": outcome.name,
+        "ok": outcome.ok,
+        "detail": outcome.detail,
+        "duration_seconds": outcome.duration_seconds,
+    }
+
+
+def _decode_step_outcome(value: Mapping[str, object], path: str) -> StepOutcome:
+    return StepOutcome(
+        name=_str_field(value, "name", path),
+        ok=_bool_field(value, "ok", path),
+        detail=_str_field(value, "detail", path),
+        duration_seconds=_number_field(value, "duration_seconds", path),
+    )
+
+
+def _realized_outputs_to_dict(outputs: RealizedOutputs) -> dict[str, object]:
+    """``core/outputs.py`` is out of scope for this ticket, so
+    ``RealizedOutputs`` is encoded/decoded here rather than gaining its
+    own ``to_dict``/``from_dict`` pair."""
+    return {
+        "deck": outputs.deck,
+        "archives": list(outputs.archives),
+        "raw": [[source, dest] for source, dest in outputs.raw],
+    }
+
+
+def _decode_realized_outputs(
+    value: Mapping[str, object], path: str
+) -> RealizedOutputs:
+    archives = _str_tuple_field(value, "archives", path)
+    raw_items = _list_field(value, "raw", path)
+    raw_path = _join(path, "raw")
+    raw: list[tuple[str, str]] = []
+    for index, item in enumerate(raw_items):
+        pair_path = f"{raw_path}[{index}]"
+        if not isinstance(item, list) or len(item) != 2:
+            raise StateFormatError(
+                f"{pair_path}: must be a 2-item list, got {type(item).__name__}"
+            )
+        source, dest = item
+        if not isinstance(source, str) or not isinstance(dest, str):
+            raise StateFormatError(f"{pair_path}: must be a list of two str")
+        raw.append((source, dest))
+    return RealizedOutputs(
+        deck=_optional_str_field(value, "deck", path),
+        archives=archives,
+        raw=tuple(raw),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class FinalizeRecord:
+    run_id: str
+    diagnosis: Diagnosis
+    postprocess: StepOutcome | None = None
+    synthesis: StepOutcome | None = None
+    outputs: RealizedOutputs | None = None
+    steps: tuple[StepRecord, ...] = ()
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "kind": FINALIZE_KIND,
+            "schema_version": FINALIZE_SCHEMA_VERSION,
+            "run_id": self.run_id,
+            "diagnosis": self.diagnosis.to_dict(),
+            "postprocess": (
+                None
+                if self.postprocess is None
+                else _step_outcome_to_dict(self.postprocess)
+            ),
+            "synthesis": (
+                None
+                if self.synthesis is None
+                else _step_outcome_to_dict(self.synthesis)
+            ),
+            "outputs": (
+                None
+                if self.outputs is None
+                else _realized_outputs_to_dict(self.outputs)
+            ),
+            "steps": [_step_record_to_dict(step) for step in self.steps],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object]) -> FinalizeRecord:
+        extra = set(data) - _FINALIZE_TOP_LEVEL_KEYS
+        if extra:
+            raise StateFormatError(f"unknown top-level keys: {sorted(extra)}")
+
+        kind = data.get("kind")
+        if kind != FINALIZE_KIND:
+            raise StateFormatError(
+                f"kind: expected {FINALIZE_KIND!r}, got {kind!r}"
+            )
+
+        schema_version = data.get("schema_version")
+        if isinstance(schema_version, bool) or not isinstance(
+            schema_version, int
+        ):
+            raise StateFormatError(
+                f"schema_version: must be int, got "
+                f"{type(schema_version).__name__}"
+            )
+        if schema_version != FINALIZE_SCHEMA_VERSION:
+            raise StateFormatError(
+                f"schema_version: expected {FINALIZE_SCHEMA_VERSION}, "
+                f"got {schema_version}"
+            )
+
+        postprocess_raw = _optional_mapping_field(data, "postprocess", "")
+        synthesis_raw = _optional_mapping_field(data, "synthesis", "")
+        outputs_raw = _optional_mapping_field(data, "outputs", "")
+
+        return cls(
+            run_id=_str_field(data, "run_id", ""),
+            diagnosis=_decode_diagnosis(
+                _mapping_field(data, "diagnosis", ""), "diagnosis"
+            ),
+            postprocess=(
+                None
+                if postprocess_raw is None
+                else _decode_step_outcome(postprocess_raw, "postprocess")
+            ),
+            synthesis=(
+                None
+                if synthesis_raw is None
+                else _decode_step_outcome(synthesis_raw, "synthesis")
+            ),
+            outputs=(
+                None
+                if outputs_raw is None
+                else _decode_realized_outputs(outputs_raw, "outputs")
+            ),
+            steps=_decode_steps(_list_field(data, "steps", ""), "steps"),
+        )
+
+
+def write_finalize(ws: Workspace, rec: FinalizeRecord) -> None:
+    """ADR-010/amendment 2: one atomic write per finalize run, no lock.
+
+    A requeued finalize rerun calls this again and atomically replaces
+    whatever a previous attempt left.
+    """
+    payload = json.dumps(rec.to_dict(), indent=2, ensure_ascii=False) + "\n"
+    write_atomic(ws.finalize_path, payload.encode("utf-8"))
+
+
+def load_finalize(ws: Workspace, run_id: str) -> FinalizeRecord | None:
+    data = _read_json_document(ws.finalize_path, "finalize.json")
+    if data is None:
+        return None
+    record = FinalizeRecord.from_dict(data)
+    if record.run_id != run_id:
+        raise StateFormatError(
+            f"run_id: expected {run_id!r}, got {record.run_id!r}"
+        )
+    return record

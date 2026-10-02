@@ -210,6 +210,43 @@ def test_artifacts_path_identifier_collision_raises_value_error() -> None:
         reporter.artifacts_path(uri)
 
 
+def test_check_artifacts_path_valid_uri_returns_none_without_side_effects() -> (
+    None
+):
+    uri = f"s3://my-bucket/artifacts/{'a' * 64}"
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    reporter.check_artifacts_path(uri)
+
+    assert channel.lines == []
+    assert reporter._artifacts_emitted is False
+
+
+def test_check_artifacts_path_invalid_uri_raises_value_error() -> None:
+    reporter = Reporter(_ListChannel(), enabled=True)
+    with pytest.raises(ValueError, match="invalid artifacts uri"):
+        reporter.check_artifacts_path("s3://bad")
+
+
+def test_check_artifacts_path_identifier_collision_raises_value_error() -> None:
+    uri = f"s3://my-queue-bucket/artifacts/{'0' * 64}"
+    reporter = Reporter(_ListChannel(), enabled=True)
+    with pytest.raises(ValueError, match="platform identifier"):
+        reporter.check_artifacts_path(uri)
+
+
+def test_check_artifacts_path_then_artifacts_path_emits_exactly_once() -> None:
+    uri = f"s3://my-bucket/artifacts/{'a' * 64}"
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    reporter.check_artifacts_path(uri)
+    reporter.artifacts_path(uri)
+
+    assert _hooks_of(channel) == [Hook("SetExecutionArtifactsPath", (uri,))]
+
+
 def test_terminal_annotation_path_not_found_breaks_identifier_with_word_joiner() -> (
     None
 ):

@@ -266,3 +266,40 @@ def test_scancel_configuring_job_cancels_before_script_runs(
         "-j", str(job_id), "--noheader", "--parsable2", "--format=JobID,State"
     )
     assert sacct_result.stdout.strip() == f"{job_id}|CANCELLED"
+
+
+def test_scancel_running_job_exiting_immediately_on_sigterm_ends_cancelled(
+    fake_slurm: FakeSlurm, tmp_path: Path
+) -> None:
+    """Regression: ``_scancel`` must record CANCELLED before sending
+    SIGTERM, exactly like real Slurm records the cancellation in
+    slurmctld before signalling. A job that reacts to SIGTERM by
+    exiting 0 immediately used to race ``_wait_for_exit``/``_finalize``
+    into overwriting CANCELLED with COMPLETED when the old code sent
+    the signal first and wrote the new state second. Looped 10x since
+    the race window is timing-dependent."""
+    for i in range(10):
+        script = write_script(
+            tmp_path, f"trap-exit-{i}.sh", "trap 'exit 0' TERM\nsleep 30\n"
+        )
+
+        result = sbatch("--parsable", str(script), cwd=tmp_path)
+        job_id = int(result.stdout.strip())
+        wait_for_state(fake_slurm, job_id, "RUNNING")
+        pgid = fake_slurm.job(job_id)["pgid"]
+
+        cancel_result = scancel(str(job_id))
+        assert cancel_result.returncode == 0
+
+        _wait_for_pgid_dead(pgid, 2.0, "job's process group still alive")
+        wait_for_state(fake_slurm, job_id, "CANCELLED")
+        assert fake_slurm.job(job_id)["state"] == "CANCELLED"
+
+        sacct_result = sacct(
+            "-j",
+            str(job_id),
+            "--noheader",
+            "--parsable2",
+            "--format=JobID,State",
+        )
+        assert sacct_result.stdout.strip() == f"{job_id}|CANCELLED"
