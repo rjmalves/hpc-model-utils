@@ -10,11 +10,11 @@ the lazy import inside the method.
 
 from unittest.mock import patch
 
-import pytest
 import click
+import pytest
 
 from app.adapter.repository.abstractmodel import ModelFactory
-from app.click_types import ModelNameType, S3PathType, PositiveIntType
+from app.click_types import ModelNameType, PositiveIntType, S3PathType
 
 FAKE_MODEL = "test_click_types_model_xyz987"
 

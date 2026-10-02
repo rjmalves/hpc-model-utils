@@ -17,7 +17,6 @@ from app.errors import (
 )
 from app.utils.scheduler import JobCompletionInfo
 
-
 # ---------------------------------------------------------------------------
 # Exit code constants
 # ---------------------------------------------------------------------------

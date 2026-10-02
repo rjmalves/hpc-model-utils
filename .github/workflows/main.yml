@@ -19,13 +19,15 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install the project
-        run: uv sync --all-extras --dev
+        run: uv sync --frozen --dev
       - name: Lint
-        run: uv run ruff check ./app
+        run: uv run ruff check src app main.py tests
+      - name: Type check (strict)
+        run: uv run mypy --strict src/hpc_model_utils
       - name: Type check
-        run: uv run mypy ./app
+        run: uv run mypy app
       - name: Unit tests
-        run: uv run pytest tests/ -m "not integration" --ignore=tests/adapter --cov=app --cov-report=xml
+        run: uv run pytest tests/ -m "not integration" --cov=hpc_model_utils --cov=app --cov-branch --cov-report=xml
 
   integration-test:
     runs-on: ubuntu-latest
@@ -40,7 +42,7 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install the project
-        run: uv sync --all-extras --dev
+        run: uv sync --frozen --dev
       - name: Start LocalStack
         run: |
           docker run -d \
@@ -68,7 +70,7 @@ jobs:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
-        run: uv run pytest tests/integration/ -v -m integration --cov=app.utils.s3 --cov-report=xml --cov-append
+        run: uv run pytest tests/integration/ -v -m integration --cov=hpc_model_utils --cov=app --cov-branch --cov-report=xml --cov-append
       - name: Upload coverage
         if: matrix.python-version == '3.13'
         uses: codecov/codecov-action@v3

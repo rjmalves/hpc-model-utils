@@ -8,17 +8,17 @@ The per-command validators that compose these primitives are covered separately
 in test_validation_per_command.py.
 """
 
-import pytest
 import click
+import pytest
 
 from app.adapter.repository.abstractmodel import ModelFactory
 from app.validation import (
     validate_model_name,
-    validate_s3_path,
-    validate_positive_int,
     validate_optional_positive_int,
-    validate_queue_name,
     validate_path_not_empty,
+    validate_positive_int,
+    validate_queue_name,
+    validate_s3_path,
 )
 
 FAKE_MODEL = "test_primitive_model_abc123"

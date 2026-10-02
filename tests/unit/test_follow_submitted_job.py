@@ -4,7 +4,6 @@ import pytest
 
 from app.utils.constants import SLURM_SUBMISSION_REGEX_PATTERN
 from app.utils.scheduler import (
-    JobCompletionInfo,
     JobOutputFiles,
     cancel_submitted_job,
     follow_submitted_job,

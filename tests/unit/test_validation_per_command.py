@@ -8,24 +8,24 @@ Special cases:
 - validate_check_and_fetch_inputs: empty parent_path skips S3 validation for it
 """
 
-import pytest
 import click
+import pytest
 
 from app.adapter.repository.abstractmodel import ModelFactory
 from app.validation import (
-    validate_check_and_fetch_inputs,
-    validate_check_and_fetch_executables,
-    validate_extract_sanitize_inputs,
-    validate_preprocess,
-    validate_run,
-    validate_generate_execution_status,
-    validate_postprocess,
-    validate_output_compression_and_cleanup,
-    validate_result_upload,
     validate_cancel_run,
+    validate_check_and_fetch_executables,
+    validate_check_and_fetch_inputs,
     validate_download_executed_run,
+    validate_extract_sanitize_inputs,
     validate_fetch_extract_raw_outputs,
+    validate_generate_execution_status,
     validate_ingest_offline_run,
+    validate_output_compression_and_cleanup,
+    validate_postprocess,
+    validate_preprocess,
+    validate_result_upload,
+    validate_run,
 )
 
 # ---------------------------------------------------------------------------
