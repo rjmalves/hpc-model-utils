@@ -40,6 +40,16 @@ from hpc_model_utils.core.workspace import Workspace
 _NAME_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
 
 
+class PostprocessError(Exception):
+    """Plugin-contract signal for a recordable ``postprocess`` failure
+    (R137/ADR-053, additive to ADR-003): ``finalize`` keeps the run's
+    SUCCESS status and records the failure loudly, and the C2 toolbox
+    logs it and exits 0. Deliberately not an ``HpcmuError`` -- this is
+    a plugin-layer contract type, not a CLI-fatal one. Its message
+    must never contain an absolute path.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutableSpec:
     """Executable names, relative to ``ws.assets``."""

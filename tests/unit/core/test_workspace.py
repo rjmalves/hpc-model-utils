@@ -20,6 +20,7 @@ def test_workspace_at_property_access_does_not_create_hpcmu_dir(
     ws = Workspace.at(tmp_path)
     _ = (
         ws.assets,
+        ws.eco_deck_path,
         ws.hpcmu_dir,
         ws.state_path,
         ws.finalize_path,
@@ -29,6 +30,7 @@ def test_workspace_at_property_access_does_not_create_hpcmu_dir(
         ws.model_exit_path,
         ws.legacy_status_path,
         ws.legacy_metadata_path,
+        ws.parent_dir,
         ws.has_state,
     )
     assert (tmp_path / ".hpcmu").exists() is False
@@ -37,7 +39,9 @@ def test_workspace_at_property_access_does_not_create_hpcmu_dir(
 def test_properties_return_expected_paths(tmp_path: Path) -> None:
     ws = Workspace.at(tmp_path)
     assert ws.assets == tmp_path / "assets"
+    assert ws.eco_deck_path == ws.root / "eco_deck.zip"
     assert ws.hpcmu_dir == tmp_path / ".hpcmu"
+    assert ws.parent_dir == ws.hpcmu_dir / "parent"
     assert ws.state_path == tmp_path / ".hpcmu" / "state.json"
     assert ws.finalize_path == tmp_path / ".hpcmu" / "finalize.json"
     assert ws.jobs_dir == tmp_path / ".hpcmu" / "jobs"
@@ -57,6 +61,7 @@ def test_ensure_layout_called_twice_creates_layout_without_error(
     assert ws.jobs_dir.is_dir()
     assert ws.logs_dir.is_dir()
     assert ws.outputs_dir.is_dir()
+    assert ws.parent_dir.is_dir() is False
 
 
 def test_job_script_returns_jobs_dir_sbatch_path(tmp_path: Path) -> None:

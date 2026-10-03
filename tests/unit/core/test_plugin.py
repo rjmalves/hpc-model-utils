@@ -184,21 +184,21 @@ def test_get_plugin_case_insensitive_returns_fake_instance() -> None:
 
 
 def test_get_plugin_unknown_name_raises_usage_error() -> None:
-    with pytest.raises(UsageError, match=r"valid: \[\]"):
+    with pytest.raises(UsageError, match=r"unknown model 'fake'"):
         get_plugin("fake")
 
 
 def test_get_plugin_after_fake_registered_restores_registry() -> None:
     with fake_registered():
         get_plugin("fake")
-    with pytest.raises(UsageError, match=r"valid: \[\]"):
+    with pytest.raises(UsageError, match=r"unknown model 'fake'"):
         get_plugin("fake")
 
 
 def test_register_fake_returns_previous_mapping() -> None:
     previous = register_fake()
     try:
-        assert dict(previous) == {}
+        assert "fake" not in previous
         assert "fake" in models.PLUGINS
     finally:
         models.PLUGINS = previous

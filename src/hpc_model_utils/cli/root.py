@@ -290,3 +290,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 # are defined, because `cli.finalize` imports them back from this same
 # module -- a top-of-file import would be a real cycle.
 import hpc_model_utils.cli.finalize  # noqa: E402,F401
+
+# ticket-054: registers the two C2 toolbox commands on `cli` by import
+# side effect, for the same reason as the `finalize` import above.
+import hpc_model_utils.cli.toolbox  # noqa: E402,F401
+
+# ticket-053: registers the eight C1 workflow commands on `cli` by
+# import side effect, for the same reason as the `finalize` import
+# above.
+import hpc_model_utils.cli.workflow  # noqa: E402,F401

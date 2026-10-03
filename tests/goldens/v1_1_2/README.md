@@ -20,7 +20,7 @@ that tag) with `capture.py`, against the vendored fixture decks in
 `tests/fixtures/decks/`. See ADR-048 (which supersedes ADR-026 after the
 test-strategist sign-off objection, R136) for the capture scope and rationale.
 
-`capture.py` is deleted alongside `app/` in ticket-057; git history keeps it.
+`capture.py` was deleted with `app/` in ticket-057; git history keeps it (`git log --diff-filter=D -1 -- tests/goldens/v1_1_2/capture.py`).
 It is not a pytest module (pytest's `python_files = ["test_*.py"]` setting
 does not match it), and it must not be renamed to match that pattern.
 
@@ -65,5 +65,13 @@ See ADR-048 (R90, R16, R17, R55, R136) for the capture scope and rationale.
 | `parent_starting_date` SetMetadata hook | v1 never emits a `SetMetadata` hook for `parent_starting_date` | v2 emits it from the same projection items | A hook-encoding difference (ADR-007 changes the hook encoding), not a file difference — `parent_starting_date` lands in `metadata.modelops` identically in both; hooks are not frozen by this ticket |
 | `archives.decomp.uploads` | Never uploads `saidas/relgnl.<ext>` | Uploads `saidas/relgnl.<ext>` deliberately | C6 (R17) requires the raw DECOMP `relgnl` output; ADR-048 names this addition |
 | `archives.newave.uploads` / `archives.decomp.uploads` | Uploads `stdout.modelops` and `stderr.modelops` | Uploads `saidas/logs/<phase>-<jobid>.out` instead | ADR-040 changes how execution logs are captured and stored |
+| `archives.newave.archives.deck_processado.zip` | omits `bid.dat`, `elnino.dat`, `ensoaux.dat`, `itaipu.dat` | includes them | C5/R16; ticket-046 Decision B |
+| `archives.newave.uploads.residual_inputs` | residual `saidas/{bid,elnino,ensoaux,itaipu}.dat` | not uploaded | they are deck inputs inside `entradas/deck_processado.zip`; no consumer reads them |
+| `archives.newave.uploads.residual_rule` | residual names matched `.*\.dat` with `search` | names ending in `.dat` (root and the four v1 directories) | v1's regex also matched names such as `x.data` |
+| `archives.decomp.uploads.dadger_echo` | uploads `entradas/<dadger>` (`entradas/dadger.rv0`) | not uploaded | no consumer reads it; R55's entradas set is `eco_deck.zip` and `deck_processado.zip`, both of which contain the dadger; ticket-052 Decision A |
+| `archives.*.uploads.status_modelops` | uploads `saidas/status.modelops` whenever present (the `.*\.modelops` rule); the capture workspace had none | always uploads it, before `run.json` and the final `metadata.modelops` | parity with a real v1 run; ADR-042 fixes its position |
+| `archives.*.uploads.run_json` | no `run.json` | uploads `saidas/run.json` | R55: additive run record |
+| `archives.*.remaining` | deletes every archived file and moves `out/` to the root | deletes nothing at the root; archives are written under `.hpcmu/outputs/` | R70: compression is folded into finalize; no step mutates the deck directory after the run |
+| `deck_newave.zip` `dsvagua.dat` encoding (not frozen) | left Latin-1 (`file -i` reads only a leading window) | converted to UTF-8 like every other Latin-1 member | ticket-021 whole-file classification; the accented text is a trailing name field, so no fixed-width column moves |
 
 Ticket-008 and later tickets append their rows below this table.

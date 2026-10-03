@@ -39,6 +39,7 @@ from hpc_model_utils.core.run_record import (
     render_run_json,
 )
 from hpc_model_utils.core.state import (
+    ExecutionSource,
     RunState,
     StateStore,
     load_finalize,
@@ -55,7 +56,6 @@ from hpc_model_utils.infra.s3 import ObjectStore, S3Uri
 
 logger = logging.getLogger(__name__)
 
-_ECO_DECK_NAME = "eco_deck.zip"
 _UPLOAD_ERRORS = (ObjectNotFoundError, StorageBackendError, OSError)
 
 
@@ -197,10 +197,10 @@ def publish(
         manifest.append(ArtifactEntry(rel, size))
 
     try:
-        eco_deck = ws.root / _ECO_DECK_NAME
-        if eco_deck.is_file():
-            rel = f"entradas/{_ECO_DECK_NAME}"
-            _upload(eco_deck, prefix.join(rel), rel)
+        eco_deck_path = ws.eco_deck_path
+        if eco_deck_path.is_file():
+            rel = f"entradas/{eco_deck_path.name}"
+            _upload(eco_deck_path, prefix.join(rel), rel)
 
         if realized is not None and realized.deck is not None:
             rel = "entradas/deck_processado.zip"
@@ -228,10 +228,11 @@ def publish(
                     rel = f"sintese/{entry.name}"
                     _upload(entry, prefix.join(rel), rel)
 
-        current = "saidas/status.modelops"
+        rel = "saidas/status.modelops"
+        current = rel
         status_local = staging / "status.modelops"
         status_local.write_bytes(own_status)
-        _upload(status_local, status_key, "saidas/status.modelops")
+        _upload(status_local, status_key, rel)
 
         record = build_run_record(
             state,
@@ -242,17 +243,17 @@ def publish(
             reuse=ReuseRecord(reused, previous) if reused else None,
             published_at=utc_now_iso(),
         )
-        current = "saidas/run.json"
+        rel = "saidas/run.json"
+        current = rel
         run_json_local = ws.outputs_dir / "run.json"
         run_json_local.write_bytes(render_run_json(record).encode("utf-8"))
-        _upload(
-            run_json_local, prefix.join("saidas/run.json"), "saidas/run.json"
-        )
+        _upload(run_json_local, prefix.join(rel), rel)
 
-        current = "saidas/metadata.modelops"
+        rel = "saidas/metadata.modelops"
+        current = rel
         metadata_local = staging / "metadata.modelops"
         metadata_local.write_bytes(own_metadata)
-        _upload(metadata_local, metadata_key, "saidas/metadata.modelops")
+        _upload(metadata_local, metadata_key, rel)
     except _UPLOAD_ERRORS as exc:
         if manifest or reused:
             try:
@@ -280,7 +281,15 @@ def publish(
 
     reporter.artifacts_path(uri)
     annotation = diagnosis.annotation()
+    suffixes = ""
+    if state.execution_source is ExecutionSource.OFFLINE:
+        suffixes += " (imported offline run, not executed on the cluster)"
     if reused:
-        suffix = f" (prefix reused; previous run {previous or 'unidentified'})"
-        annotation = annotation[: ANNOTATION_MAX_LENGTH - len(suffix)] + suffix
+        suffixes += (
+            f" (prefix reused; previous run {previous or 'unidentified'})"
+        )
+    if suffixes:
+        annotation = (
+            annotation[: ANNOTATION_MAX_LENGTH - len(suffixes)] + suffixes
+        )
     reporter.terminal(diagnosis.status, annotation)

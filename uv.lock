@@ -312,15 +312,15 @@ wheels = [
 
 [[package]]
 name = "hpc-model-utils"
-version = "1.1.2"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
+    { name = "botocore" },
+    { name = "cfinterface" },
     { name = "click" },
     { name = "idecomp" },
-    { name = "idessem" },
     { name = "inewave" },
-    { name = "pytz" },
 ]
 
 [package.dev-dependencies]
@@ -338,11 +338,11 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.43" },
+    { name = "botocore", specifier = ">=1.43" },
+    { name = "cfinterface", specifier = ">=1.10.1" },
     { name = "click", specifier = ">=8.4" },
     { name = "idecomp", specifier = ">=1.11.0" },
-    { name = "idessem", specifier = ">=1.3.0" },
     { name = "inewave", specifier = ">=1.14.1" },
-    { name = "pytz" },
 ]
 
 [package.metadata.requires-dev]
@@ -445,20 +445,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ea/98/5ed222ed7c2324b6932f1fbedf77d24571f50e50c7299ce50d37a0b61ce6/idecomp-1.11.0.tar.gz", hash = "sha256:9cd5964803672219a7be46777ba13c361cb451d8772a632b86849e603c56fecd", size = 863276, upload-time = "2026-06-10T12:52:17.461Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/96/75/b86dc905f8eef9d99ab2c5a636001eb4d64caa144aa952538a5e3877c14f/idecomp-1.11.0-py3-none-any.whl", hash = "sha256:c9defed27dfc5f71c32c13f066aef7922f52ba85cbab65adee9d0562b2d9ace7", size = 131082, upload-time = "2026-06-10T12:52:15.942Z" },
-]
-
-[[package]]
-name = "idessem"
-version = "1.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cfinterface" },
-    { name = "numpy" },
-    { name = "pandas" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/aa/4f/5654fad39ae879ff3e8deb6da9cbd3cc655770ef9f3a28e7d9502a0c999d/idessem-1.3.0.tar.gz", hash = "sha256:eea98829bd48f2c8587d6daf554c8168a157d8213565a93feab4ee6bedf2f8c4", size = 397397, upload-time = "2026-06-10T12:52:58.751Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e6/c7/e9347f7105662cad2ad96cdd6a65709b0065514e6099094ecd223a82bd2e/idessem-1.3.0-py3-none-any.whl", hash = "sha256:b8c9928afca4a25a3cb0b3d99f98cc6f2084bc770940e6a1976bac9e53ccb922", size = 129377, upload-time = "2026-06-10T12:52:57.09Z" },
 ]
 
 [[package]]
@@ -825,15 +811,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
-]
-
-[[package]]
-name = "pytz"
-version = "2026.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ff/46/dd499ec9038423421951e4fad73051febaa13d2df82b4064f87af8b8c0c3/pytz-2026.2.tar.gz", hash = "sha256:0e60b47b29f21574376f218fe21abc009894a2321ea16c6754f3cad6eb7cdd6a", size = 320861, upload-time = "2026-05-04T01:35:29.667Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/dd/96da98f892250475bdf2328112d7468abdd4acc7b902b6af23f4ed958ea0/pytz-2026.2-py2.py3-none-any.whl", hash = "sha256:04156e608bee23d3792fd45c94ae47fae1036688e75032eea2e3bf0323d1f126", size = 510141, upload-time = "2026-05-04T01:35:27.408Z" },
 ]
 
 [[package]]

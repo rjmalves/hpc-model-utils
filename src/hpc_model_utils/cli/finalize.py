@@ -16,11 +16,12 @@ from pathlib import Path
 
 import click
 
+from hpc_model_utils.cli.params import ModelArg
 from hpc_model_utils.cli.root import AppContext, HpcmuCommand, cli
 from hpc_model_utils.core.lifecycle.finalize import finalize
+from hpc_model_utils.core.plugin import ModelPlugin
 from hpc_model_utils.core.workspace import Workspace
 from hpc_model_utils.infra.slurm import Slurm
-from hpc_model_utils.models import get_plugin
 
 _MODEL_JOB_ID_PATTERN = re.compile(r"[0-9]+")
 
@@ -40,7 +41,7 @@ def _validate_model_job_id(
 @cli.command(
     "finalize", cls=HpcmuCommand, hidden=True, emits_terminal_status=False
 )
-@click.argument("model")
+@click.argument("plugin", type=ModelArg())
 @click.option("--model-job-id", required=True, callback=_validate_model_job_id)
 @click.option("--cores", required=True, type=click.IntRange(min=1))
 @click.option("--synthesis-bin", type=click.Path(path_type=Path))
@@ -48,13 +49,12 @@ def _validate_model_job_id(
 @click.pass_obj
 def finalize_command(
     app_ctx: AppContext,
-    model: str,
+    plugin: ModelPlugin,
     model_job_id: str | None,
     cores: int,
     synthesis_bin: Path | None,
     slurm_path: Path | None,
 ) -> None:
-    plugin = get_plugin(model)
     finalize(
         Workspace.at(Path.cwd()),
         plugin,

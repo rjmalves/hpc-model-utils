@@ -24,6 +24,7 @@ import shlex
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
+from typing import ClassVar
 
 from hpc_model_utils import models
 from hpc_model_utils.core.diagnosis import JobReport, RunStatus, Verdict
@@ -37,6 +38,7 @@ from hpc_model_utils.core.workspace import Workspace
 class FakePlugin(ModelPlugin):
     name = "fake"
     executables = ExecutableSpec(entrypoint="fake-model")
+    output_patterns: ClassVar[tuple[str, ...]] = (r"fake\.out",)
 
     def study_info(self, ws: Workspace) -> StudyInfo:
         return StudyInfo(name="fake", starting_date="2026-01-01")
@@ -73,6 +75,12 @@ class FakePlugin(ModelPlugin):
 
     def synthesis_args(self, cpus: int) -> tuple[str, ...] | None:
         return ("completa", "--processadores", str(cpus))
+
+
+class ParentPlugin(FakePlugin):
+    name = "fakeparent"
+    parent_model = "NEWAVE"
+    parent_artifacts = ("cortes.zip",)
 
 
 def install_fake_model(

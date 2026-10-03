@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import ast
+import re
 import shutil
+import sys
+import tomllib
+from importlib.metadata import packages_distributions
 from pathlib import Path
 
 PACKAGE_NAME = "hpc_model_utils"
+PYPROJECT_PATH = Path(__file__).resolve().parents[2] / "pyproject.toml"
+_DEPENDENCY_NAME_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
 
 ALLOWED_EDGES: dict[str, frozenset[str]] = {
     "infra": frozenset(),
@@ -39,8 +45,6 @@ def _package_parts(relative_path: Path) -> tuple[str, ...]:
 def _resolve_relative_base(
     own_package: tuple[str, ...], level: int
 ) -> tuple[str, ...]:
-    if level == 1:
-        return own_package
     return own_package[: len(own_package) - (level - 1)]
 
 
@@ -65,8 +69,11 @@ def _iter_python_files(src_root: Path) -> list[Path]:
     return sorted(src_root.rglob("*.py"))
 
 
-def _import_nodes(py_file: Path) -> list[ast.Import | ast.ImportFrom]:
-    tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+def _parse(py_file: Path) -> ast.Module:
+    return ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+
+
+def _import_nodes(tree: ast.Module) -> list[ast.Import | ast.ImportFrom]:
     return [
         node
         for node in ast.walk(tree)
@@ -83,7 +90,7 @@ def find_violations(src_root: Path) -> list[str]:
             continue
         package_parts = _package_parts(relative)
         is_package = py_file.name == "__init__.py"
-        for node in _import_nodes(py_file):
+        for node in _import_nodes(_parse(py_file)):
             for target in _iter_import_targets(node, package_parts, is_package):
                 if len(target) < 2 or target[0] != PACKAGE_NAME:
                     continue
@@ -122,7 +129,7 @@ def find_restricted_model_imports(src_root: Path) -> list[str]:
         is_package = py_file.name == "__init__.py"
         restricted = any(
             target and target[0] in RESTRICTED_IMPORTS
-            for node in _import_nodes(py_file)
+            for node in _import_nodes(_parse(py_file))
             for target in _iter_import_targets(node, package_parts, is_package)
         )
         if restricted:
@@ -196,3 +203,70 @@ def test_find_restricted_model_imports_outside_models_reports_file(
     )
     violations = find_restricted_model_imports(tree_root)
     assert str(Path("cli") / "_probe.py") in violations
+
+
+def _is_type_checking_guard(test: ast.expr) -> bool:
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+    )
+
+
+def _type_checking_lines(tree: ast.Module) -> set[int]:
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.If) and _is_type_checking_guard(node.test)
+        ):
+            continue
+        for child in ast.walk(node):
+            lineno = getattr(child, "lineno", None)
+            if lineno is not None:
+                lines.add(lineno)
+    return lines
+
+
+def find_runtime_third_party_top_level_names(src_root: Path) -> set[str]:
+    names: set[str] = set()
+    for py_file in _iter_python_files(src_root):
+        tree = _parse(py_file)
+        excluded = _type_checking_lines(tree)
+        for node in _import_nodes(tree):
+            if node.lineno in excluded:
+                continue
+            if isinstance(node, ast.Import):
+                names.update(alias.name.split(".")[0] for alias in node.names)
+            elif node.level == 0 and node.module:
+                names.add(node.module.split(".")[0])
+    return names - set(sys.stdlib_module_names) - {PACKAGE_NAME}
+
+
+def _normalize_distribution_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def declared_dependency_names(pyproject_path: Path) -> set[str]:
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    names = set[str]()
+    for dependency in data["project"]["dependencies"]:
+        match = _DEPENDENCY_NAME_RE.match(dependency)
+        assert match, f"could not parse dependency name from {dependency!r}"
+        names.add(_normalize_distribution_name(match.group(1)))
+    return names
+
+
+def test_runtime_third_party_imports_equal_declared_dependencies() -> None:
+    top_level_names = find_runtime_third_party_top_level_names(SRC_ROOT)
+    distributions = packages_distributions()
+    imported = {
+        _normalize_distribution_name(distributions[name][0])
+        for name in top_level_names
+    }
+    declared = declared_dependency_names(PYPROJECT_PATH)
+
+    undeclared = imported - declared
+    unused = declared - imported
+    assert imported == declared, (
+        f"undeclared runtime imports (add to [project].dependencies): "
+        f"{sorted(undeclared)}; declared but unused dependencies (remove "
+        f"from [project].dependencies): {sorted(unused)}"
+    )

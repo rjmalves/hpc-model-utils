@@ -14,7 +14,6 @@ import logging
 import os
 import re
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -197,13 +196,18 @@ def _raw_destination(entry: RawFile, rel_path: str) -> str:
 
 
 def _write_archive(
-    path: Path, ws: Workspace, layout: Layout, rels: Sequence[str]
+    path: Path,
+    ws: Workspace,
+    layout: Layout,
+    rels: Sequence[str],
+    *,
+    workers: int,
 ) -> None:
     files = [ws.root / rel for rel in rels]
     if isinstance(layout, Tree):
-        archive.write_tree(path, ws.root / layout.root, files)
+        archive.write_tree(path, ws.root / layout.root, files, workers=workers)
     else:
-        archive.write_flat(path, files)
+        archive.write_flat(path, files, workers=workers)
 
 
 def _clear_declared_outputs(plan: OutputPlan, ws: Workspace) -> None:
@@ -241,8 +245,11 @@ def realize(
     before anything is written. Any existing file under
     ``ws.outputs_dir`` whose name this plan declares (the deck archive
     or a group's archive) is removed before writing, so a re-run never
-    leaves a stale archive for a group that no longer matches. Group
-    archives are written concurrently; an empty group writes nothing.
+    leaves a stale archive for a group that no longer matches. Archives
+    are written one at a time -- the deck first, then the groups in
+    plan order -- each with up to ``workers`` threads compressing its
+    members in parallel (ADR-040, parallelism clause amended by
+    ticket-048b). An empty group writes nothing.
     """
     ws.ensure_layout()
     snapshot = _snapshot(ws.root)
@@ -297,7 +304,11 @@ def realize(
     if deck_sources:
         deck_archive_path = ws.outputs_dir / _DECK_ARCHIVE_NAME
         _write_archive(
-            deck_archive_path, ws, plan.deck_layout, sorted(deck_rel)
+            deck_archive_path,
+            ws,
+            plan.deck_layout,
+            sorted(deck_rel),
+            workers=workers,
         )
         deck_rel_path = ws.relative(deck_archive_path)
 
@@ -306,14 +317,8 @@ def realize(
         for group, members in group_jobs
         if members
     ]
-    if jobs:
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
-            futures = [
-                executor.submit(_write_archive, path, ws, layout, members)
-                for path, layout, members in jobs
-            ]
-            for future in futures:
-                future.result()
+    for path, layout, members in jobs:
+        _write_archive(path, ws, layout, members, workers=workers)
 
     return RealizedOutputs(
         deck=deck_rel_path,

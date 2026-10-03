@@ -190,6 +190,114 @@ class TestDelete:
         assert "Contents" not in objects
 
 
+class TestSpecialCharacterKeys:
+    @pytest.mark.parametrize(
+        "key",
+        ["dir/with space/a b.dat", "dir/ação/ç.dat"],
+        ids=["spaces", "unicode"],
+    )
+    def test_upload_get_bytes_download_round_trip(
+        self,
+        key: str,
+        test_bucket: str,
+        object_store: Boto3ObjectStore,
+    ) -> None:
+        content = b"round trip content"
+        local_file = Path(mkdtemp()) / "payload.dat"
+        local_file.write_bytes(content)
+        uri = S3Uri(test_bucket, key)
+
+        object_store.upload(local_file, uri)
+
+        assert object_store.get_bytes(uri) == content
+
+        dest = Path(mkdtemp()) / "downloaded.dat"
+        result = object_store.download(uri, dest)
+        assert result == dest
+        assert dest.read_bytes() == content
+
+
+class TestPrefixPagination:
+    @pytest.mark.slow
+    def test_more_than_1000_objects_under_prefix(
+        self,
+        test_bucket: str,
+        localstack_s3_client: S3Client,
+        object_store: Boto3ObjectStore,
+    ) -> None:
+        for i in range(1001):
+            localstack_s3_client.put_object(
+                Bucket=test_bucket, Key=f"many/file{i:04d}.txt", Body=b"x"
+            )
+        destination = Path(mkdtemp())
+
+        result = object_store.download_prefix(
+            S3Uri(test_bucket, "many"), destination
+        )
+
+        assert len(result) == 1001
+        assert object_store.exists_any(S3Uri(test_bucket, "many/")) is True
+
+
+class TestLongKey:
+    def test_1024_byte_key_round_trip(
+        self,
+        test_bucket: str,
+        object_store: Boto3ObjectStore,
+    ) -> None:
+        key = "long/" + "a" * 1019
+        assert len(key) == 1024
+        content = b"long key content"
+        local_file = Path(mkdtemp()) / "payload.dat"
+        local_file.write_bytes(content)
+        uri = S3Uri(test_bucket, key)
+
+        object_store.upload(local_file, uri)
+
+        assert object_store.get_bytes(uri) == content
+
+
+class TestEmptyFile:
+    def test_empty_file_upload_and_download_round_trip(
+        self,
+        test_bucket: str,
+        object_store: Boto3ObjectStore,
+    ) -> None:
+        local_file = Path(mkdtemp()) / "empty.dat"
+        local_file.write_bytes(b"")
+        uri = S3Uri(test_bucket, "empty/empty.dat")
+
+        object_store.upload(local_file, uri)
+
+        assert object_store.get_bytes(uri) == b""
+
+        dest = Path(mkdtemp()) / "downloaded-empty.dat"
+        result = object_store.download(uri, dest)
+        assert result == dest
+        assert dest.read_bytes() == b""
+
+
+class TestBinaryPayload:
+    def test_256_value_binary_payload_round_trip(
+        self,
+        test_bucket: str,
+        object_store: Boto3ObjectStore,
+    ) -> None:
+        content = bytes(range(256))
+        local_file = Path(mkdtemp()) / "binary.dat"
+        local_file.write_bytes(content)
+        uri = S3Uri(test_bucket, "binary/binary.dat")
+
+        object_store.upload(local_file, uri)
+
+        assert object_store.get_bytes(uri) == content
+
+        dest = Path(mkdtemp()) / "downloaded-binary.dat"
+        result = object_store.download(uri, dest)
+        assert result == dest
+        assert dest.read_bytes() == content
+
+
 class TestErrorMapping:
     def test_unreachable_endpoint_raises_storage_backend_error(self) -> None:
         client = boto3.client(

@@ -144,6 +144,25 @@ def _read_process_exit(ws: Workspace) -> int | None:
     return int(text)
 
 
+def diagnose_workspace(
+    ws: Workspace,
+    plugin: ModelPlugin,
+    report: JobReport,
+    *,
+    job_id: str | None,
+) -> Diagnosis:
+    """ticket-054: the one diagnosis entry point shared by ``finalize``
+    and the C2 toolbox's ``generate_execution_status``, so the two can
+    never diverge."""
+    return evaluate(
+        report,
+        log_patterns=plugin.log_patterns,
+        primary_evidence=plugin.primary_evidence(ws),
+        rules=lambda: plugin.diagnose(ws, report),
+        job_id=job_id,
+    )
+
+
 def _record_step_failure(diag: Diagnosis, step: str, detail: str) -> Diagnosis:
     """R137: prefix ``reason`` and prepend the evidence item for a
     plugin/synthesis step that failed, without changing the status or
@@ -336,13 +355,7 @@ def finalize(
         process_exit=_read_process_exit(ws),
         log_paths=log_paths,
     )
-    diag = evaluate(
-        report,
-        log_patterns=plugin.log_patterns,
-        primary_evidence=plugin.primary_evidence(ws),
-        rules=lambda: plugin.diagnose(ws, report),
-        job_id=model_job_id,
-    )
+    diag = diagnose_workspace(ws, plugin, report, job_id=model_job_id)
 
     postprocess_outcome: StepOutcome | None = None
     synthesis_outcome: StepOutcome | None = None

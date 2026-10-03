@@ -29,6 +29,7 @@ from hpc_model_utils.core.diagnosis import RunStatus
 from hpc_model_utils.core.launch import Resources, Toolchain
 from hpc_model_utils.core.lifecycle.cancel import cancel
 from hpc_model_utils.core.lifecycle.finalize import legacy_synthesis_bin
+from hpc_model_utils.core.lifecycle.prepare import extract_sanitize_inputs
 from hpc_model_utils.core.lifecycle.publish import publish
 from hpc_model_utils.core.lifecycle.run import JobLedger, SubmitRequest, run
 from hpc_model_utils.core.settings import EngineSettings
@@ -42,6 +43,7 @@ from hpc_model_utils.infra.s3 import S3Uri
 from hpc_model_utils.infra.slurm import JobState, Slurm
 from hpc_model_utils.platform.modelops import Reporter
 from tests.support.cli_shim import write_cli_shim
+from tests.support.decks import input_zip
 from tests.support.fake_plugin import FakePlugin, install_fake_model
 from tests.support.fake_slurm import FakeSlurm
 from tests.support.hooks import Hook, parse_hooks
@@ -227,20 +229,24 @@ def run_scenario(
     sleep: float = 0.0,
 ) -> ScenarioResult:
     ws = _make_workspace(tmp_path)
+    store = StateStore(ws)
+    sequence: list[tuple[str, str]] = []
+    channel = _SequencedChannel(sequence)
+    reporter = Reporter(channel, enabled=True)
 
-    for name, content in stale:
-        path = ws.root / name
-        path.write_text(content, encoding="utf-8")
-        # TODO(ticket-045): FakePlugin.output_patterns purge is not
-        # yet wired up, so the test removes the stale file itself
-        # rather than relying on the real purge.
-        path.unlink()
+    if stale:
+        input_zip(
+            {"deck.txt": b"deck", **{n: c.encode() for n, c in stale}},
+            ws.eco_deck_path,
+        )
+        extract_sanitize_inputs(ws, _PLUGIN, store, reporter)
+        for name, _ in stale:
+            assert not (ws.root / name).exists(), name
 
     if force is not None:
         phase, state = force
         fake_slurm.force(phase, state=state)
 
-    store = StateStore(ws)
     if offline:
         initial = store.load_or_create(_PLUGIN.name)
         store.save(replace(initial, execution_source=ExecutionSource.OFFLINE))
@@ -255,9 +261,6 @@ def run_scenario(
 
     tools = _toolchain(tmp_path, fake_slurm.bin_dir)
     slurm = Slurm(fake_slurm.bin_dir)
-    sequence: list[tuple[str, str]] = []
-    channel = _SequencedChannel(sequence)
-    reporter = Reporter(channel, enabled=True)
     ledger = JobLedger()
     emitted: list[str] = []
     settings = EngineSettings(
@@ -352,8 +355,8 @@ def test_run_scenario_b_model_timeout_publishes_set_runtime_error(
 
 # ---------------------------------------------------------------------------
 # (c) the E12 guard: a model that crashes before writing fake.out,
-# with a stale, INFEASIBLE-tagged fake.out removed first (Requirement
-# 3, ticket-045 TODO below).
+# with a stale, INFEASIBLE-tagged fake.out purged by the real
+# extract_sanitize_inputs before run() ever starts (ticket-045).
 # ---------------------------------------------------------------------------
 
 
@@ -365,8 +368,6 @@ def test_run_scenario_c_model_crash_before_output_diagnoses_missing(
         tmp_path,
         fake_slurm,
         crash_model=True,
-        # TODO(ticket-045): replace this stale-file removal with the
-        # real FakePlugin.output_patterns purge once it lands.
         stale=(("fake.out", "INFEASIBLE\n"),),
     )
 

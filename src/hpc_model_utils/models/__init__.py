@@ -1,8 +1,8 @@
 """Models layer: typed wrappers around the inewave and idecomp libraries.
 
 ``PLUGINS`` is the explicit, in-repo plugin registry (R27) -- no
-module scanning, no entry points. It starts empty by design;
-ticket-046 and ticket-050 add ``NewavePlugin()`` and ``DecompPlugin()``.
+module scanning, no entry points: ``NewavePlugin()`` (ticket-046) and
+``DecompPlugin()`` (ticket-050).
 """
 
 from __future__ import annotations
@@ -12,8 +12,12 @@ from types import MappingProxyType
 
 from hpc_model_utils.core.errors import UsageError
 from hpc_model_utils.core.plugin import ModelPlugin
+from hpc_model_utils.models.decomp import DecompPlugin
+from hpc_model_utils.models.newave import NewavePlugin
 
-PLUGINS: Mapping[str, ModelPlugin] = MappingProxyType({})
+PLUGINS: Mapping[str, ModelPlugin] = MappingProxyType(
+    {"decomp": DecompPlugin(), "newave": NewavePlugin()}
+)
 
 
 def get_plugin(name: str) -> ModelPlugin:

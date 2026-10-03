@@ -17,14 +17,31 @@ and only ``os.replace``'d onto ``archive`` after every member has been
 written successfully; on any exception the partial file is unlinked.
 ``archive`` is therefore always either absent/unchanged or a complete,
 valid zip, never a half-written one.
+
+ADR-040's parallelism clause, amended by ticket-048b (``design/
+amendments.md`` AM-003): members are compressed in parallel, up to
+``workers`` threads per archive, each one streaming its member through
+raw deflate into a scratch file under the archive's own directory --
+never reading a member whole, so memory stays O(workers x 1 MiB). The
+calling thread alone appends compressed members to the ``ZipFile``, in
+input order, once a member's compression finishes. The scratch
+directory is removed, and any ``.part`` file unlinked, on every
+``BaseException``.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import shutil
+import tempfile
+import warnings
 import zipfile
+import zlib
+from collections import deque
 from collections.abc import Collection, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from hpc_model_utils.infra.errors import UnsafeArchiveError
@@ -32,6 +49,7 @@ from hpc_model_utils.infra.errors import UnsafeArchiveError
 _HPCMU_DIR = ".hpcmu"
 _STORED_SUFFIXES = frozenset({".parquet", ".zip", ".gz", ".bz2", ".xz", ".7z"})
 _DRIVE_LETTER_RE = re.compile(r"[A-Za-z]:.*")
+_CHUNK_SIZE = 1 << 20
 
 
 def _normalized_parts(name: str) -> tuple[str, ...]:
@@ -99,21 +117,110 @@ def compression_for(path: Path) -> int:
     return zipfile.ZIP_DEFLATED
 
 
-def _write_zip(archive: Path, entries: Sequence[tuple[Path, str]]) -> None:
+@dataclass(frozen=True, slots=True)
+class _CompressedMember:
+    info: zipfile.ZipInfo
+    payload: Path
+
+
+def _compress_member(
+    path: Path, arcname: str, scratch: Path
+) -> _CompressedMember:
+    info = zipfile.ZipInfo.from_file(path, arcname)
+    info.compress_type = compression_for(path)
+    with tempfile.NamedTemporaryFile(
+        dir=scratch, suffix=".member", delete=False
+    ) as dest:
+        payload = Path(dest.name)
+        with path.open("rb") as src:
+            compressor = (
+                zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
+                if info.compress_type == zipfile.ZIP_DEFLATED
+                else None
+            )
+            crc = 0
+            file_size = 0
+            compress_size = 0
+            while chunk := src.read(_CHUNK_SIZE):
+                crc = zlib.crc32(chunk, crc)
+                file_size += len(chunk)
+                piece = compressor.compress(chunk) if compressor else chunk
+                compress_size += len(piece)
+                dest.write(piece)
+            if compressor is not None:
+                tail = compressor.flush()
+                compress_size += len(tail)
+                dest.write(tail)
+    info.CRC = crc
+    info.file_size = file_size
+    info.compress_size = compress_size
+    return _CompressedMember(info, payload)
+
+
+def _append_member(zf: zipfile.ZipFile, member: _CompressedMember) -> None:
+    # Mirrors zipfile.ZipFile.mkdir (CPython 3.12-3.14): seek to
+    # start_dir, stamp header_offset, write the header, then advance
+    # start_dir past the written bytes.
+    info = member.info
+    fp = zf.fp
+    assert fp is not None
+    fp.seek(zf.start_dir)
+    info.header_offset = fp.tell()
+    if info.filename in zf.NameToInfo:
+        warnings.warn(f"Duplicate name: {info.filename!r}", UserWarning)
+    fp.write(info.FileHeader())
+    with member.payload.open("rb") as src:
+        shutil.copyfileobj(src, fp, _CHUNK_SIZE)
+    member.payload.unlink()
+    zf.filelist.append(info)
+    zf.NameToInfo[info.filename] = info
+    zf.start_dir = fp.tell()
+
+
+def _write_zip(
+    archive: Path, entries: Sequence[tuple[Path, str]], *, workers: int
+) -> None:
     tmp = archive.with_name("." + archive.name + ".part")
+    clamped = max(1, workers)
+    window = 2 * clamped
     try:
-        with zipfile.ZipFile(
-            tmp, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True
-        ) as zf:
-            for path, arcname in entries:
-                zf.write(path, arcname, compress_type=compression_for(path))
+        with (
+            tempfile.TemporaryDirectory(
+                prefix="." + archive.name + ".",
+                suffix=".members",
+                dir=archive.parent,
+            ) as scratch,
+            ThreadPoolExecutor(max_workers=clamped) as pool,
+            zipfile.ZipFile(
+                tmp, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True
+            ) as zf,
+        ):
+            scratch_dir = Path(scratch)
+            pending: deque[Future[_CompressedMember]] = deque()
+            try:
+                for path, arcname in entries:
+                    pending.append(
+                        pool.submit(
+                            _compress_member, path, arcname, scratch_dir
+                        )
+                    )
+                    if len(pending) >= window:
+                        _append_member(zf, pending.popleft().result())
+                while pending:
+                    _append_member(zf, pending.popleft().result())
+            except BaseException:
+                for future in pending:
+                    future.cancel()
+                raise
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
     os.replace(tmp, archive)
 
 
-def write_flat(archive: Path, files: Sequence[Path]) -> list[str]:
+def write_flat(
+    archive: Path, files: Sequence[Path], *, workers: int = 1
+) -> list[str]:
     seen: dict[str, Path] = {}
     for path in files:
         name = path.name
@@ -122,11 +229,15 @@ def write_flat(archive: Path, files: Sequence[Path]) -> list[str]:
                 f"duplicate basename {name!r}: {seen[name]} and {path}"
             )
         seen[name] = path
-    _write_zip(archive, [(path, name) for name, path in seen.items()])
+    _write_zip(
+        archive, [(path, name) for name, path in seen.items()], workers=workers
+    )
     return sorted(seen)
 
 
-def write_tree(archive: Path, root: Path, files: Sequence[Path]) -> list[str]:
+def write_tree(
+    archive: Path, root: Path, files: Sequence[Path], *, workers: int = 1
+) -> list[str]:
     root_resolved = root.resolve()
     entries: list[tuple[Path, str]] = []
     for path in files:
@@ -138,5 +249,5 @@ def write_tree(archive: Path, root: Path, files: Sequence[Path]) -> list[str]:
                 f"path escapes root {root}: {path}"
             ) from err
         entries.append((path, arcname))
-    _write_zip(archive, entries)
+    _write_zip(archive, entries, workers=workers)
     return sorted(arcname for _, arcname in entries)

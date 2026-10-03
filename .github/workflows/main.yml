@@ -21,13 +21,11 @@ jobs:
       - name: Install the project
         run: uv sync --frozen --dev
       - name: Lint
-        run: uv run ruff check src app main.py tests
+        run: uv run ruff check src tests
       - name: Type check (strict)
         run: uv run mypy --strict src/hpc_model_utils
-      - name: Type check
-        run: uv run mypy app
       - name: Unit tests
-        run: uv run pytest tests/ -m "not integration" --cov=hpc_model_utils --cov=app --cov-branch --cov-report=xml
+        run: uv run pytest tests/ -m "not integration" --cov=hpc_model_utils --cov-branch --cov-report=xml
 
   integration-test:
     runs-on: ubuntu-latest
@@ -70,7 +68,7 @@ jobs:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
-        run: uv run pytest tests/integration/ -v -m integration --cov=hpc_model_utils --cov=app --cov-branch --cov-report=xml --cov-append
+        run: uv run pytest tests/integration/ -v -m integration --cov=hpc_model_utils --cov-branch --cov-report=xml --cov-append
       - name: Upload coverage
         if: matrix.python-version == '3.13'
         uses: codecov/codecov-action@v3

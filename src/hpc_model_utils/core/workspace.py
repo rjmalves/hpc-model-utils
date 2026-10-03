@@ -46,8 +46,16 @@ class Workspace:
         return self.root / "assets"
 
     @property
+    def eco_deck_path(self) -> Path:
+        return self.root / "eco_deck.zip"
+
+    @property
     def hpcmu_dir(self) -> Path:
         return self.root / ".hpcmu"
+
+    @property
+    def parent_dir(self) -> Path:
+        return self.hpcmu_dir / "parent"
 
     @property
     def state_path(self) -> Path:

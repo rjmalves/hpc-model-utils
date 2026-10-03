@@ -9,6 +9,7 @@ import re
 import shutil
 import zipfile
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -17,8 +18,10 @@ from tests.support.decks import (
     STALE_DECOMP,
     STALE_NEWAVE,
     DeckWorkspace,
+    archive_golden,
     binary_cut_files,
     decomp_workspace,
+    golden_archive_workspace,
     input_zip,
     newave_workspace,
     relato_excerpt,
@@ -229,6 +232,53 @@ def test_relato_excerpt_data_error_contains_pattern() -> None:
     assert b"ERRO(S) DE ENTRADA DE DADOS" in relato_excerpt("data_error")
 
 
+@pytest.mark.parametrize("model", ["newave", "decomp"])
+def test_golden_archive_workspace_each_model_writes_outputs_and_eco_deck_path(
+    tmp_path: Path, model: Literal["newave", "decomp"]
+) -> None:
+    ws = golden_archive_workspace(tmp_path, model)
+
+    synthetic = archive_golden(model)["synthetic_outputs"]
+    assert synthetic
+    for name in synthetic:
+        assert (ws.root / name).read_bytes() == b"x\n"
+    deck_zip = decks.FIXTURES / "decks" / f"deck_{model}.zip"
+    assert ws.eco_deck_path.read_bytes() == deck_zip.read_bytes()
+    assert ws.assets.is_dir()
+    assert not ws.hpcmu_dir.exists()
+
+
+def test_golden_archive_workspace_newave_lowercases_deck_names(
+    tmp_path: Path,
+) -> None:
+    ws = golden_archive_workspace(tmp_path, "newave")
+
+    with zipfile.ZipFile(decks.FIXTURES / "decks" / "deck_newave.zip") as zf:
+        bid_bytes = zf.read("BID.DAT")
+        deck_names = set(zf.namelist())
+    names = {entry.name for entry in ws.root.iterdir() if entry.is_file()}
+    assert "BID.DAT" not in names
+    assert (ws.root / "bid.dat").read_bytes() == bid_bytes
+    assert names >= {name.lower() for name in deck_names}
+    uppercase = {name for name in deck_names if name != name.lower()}
+    assert uppercase
+    assert uppercase.isdisjoint(names)
+
+
+def test_golden_archive_workspace_lowercase_collision_raises_value_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixtures_root = tmp_path / "fixtures-collision"
+    input_zip(
+        {"BID.DAT": b"upper", "bid.dat": b"lower"},
+        fixtures_root / "decks" / "deck_newave.zip",
+    )
+    monkeypatch.setattr(decks, "FIXTURES", fixtures_root)
+
+    with pytest.raises(ValueError, match="lowercasing 'BID.DAT' collides"):
+        golden_archive_workspace(tmp_path / "ws-parent", "newave")
+
+
 def test_deck_workspace_is_frozen(tmp_path: Path) -> None:
     result = newave_workspace(tmp_path)
 
@@ -250,9 +300,11 @@ def test_fixtures_unchanged_after_builders_run_matches_provenance(
         tmp_path / "b", dadger="flexibilizador", stale_outputs=STALE_DECOMP
     )
     input_zip({"f.txt": b"x"}, tmp_path / "zips" / "input.zip", root="case")
+    golden_archive_workspace(tmp_path / "c", "newave")
+    golden_archive_workspace(tmp_path / "d", "decomp")
 
     repo_root = _PROVENANCE_PATH.parents[2]
     hashes = _provenance_hashes()
-    assert len(hashes) == 6
+    assert len(hashes) == 7
     for rel_path, expected in hashes.items():
         assert _sha256(repo_root / rel_path) == expected

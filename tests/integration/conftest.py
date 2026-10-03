@@ -6,6 +6,7 @@ from typing import Generator
 import boto3
 import pytest
 from mypy_boto3_s3 import S3Client
+from mypy_boto3_s3.type_defs import ObjectIdentifierTypeDef
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -37,30 +38,29 @@ def localstack_s3_client() -> S3Client:
 def test_bucket(localstack_s3_client: S3Client) -> Generator[str, None, None]:
     """
     Create test bucket for integration tests.
-    
+
     Yields bucket name, then cleans up after test.
     """
     bucket_name = "test-hpc-model-utils"
-    
+
     try:
         localstack_s3_client.create_bucket(Bucket=bucket_name)
-    except localstack_s3_client.exceptions.BucketAlreadyExists:
+    except (
+        localstack_s3_client.exceptions.BucketAlreadyExists,
+        localstack_s3_client.exceptions.BucketAlreadyOwnedByYou,
+    ):
         pass
-    except localstack_s3_client.exceptions.BucketAlreadyOwnedByYou:
-        pass
-    
+
     yield bucket_name
-    
-    try:
-        objects = localstack_s3_client.list_objects_v2(Bucket=bucket_name)
-        if "Contents" in objects:
-            delete_objects = {
-                "Objects": [{"Key": obj["Key"]} for obj in objects["Contents"]]
-            }
+
+    paginator = localstack_s3_client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket_name):
+        keys: list[ObjectIdentifierTypeDef] = [
+            {"Key": obj["Key"]} for obj in page.get("Contents", [])
+        ]
+        if keys:
             localstack_s3_client.delete_objects(
-                Bucket=bucket_name, Delete=delete_objects
+                Bucket=bucket_name, Delete={"Objects": keys}
             )
-        
-        localstack_s3_client.delete_bucket(Bucket=bucket_name)
-    except Exception:
-        pass
+
+    localstack_s3_client.delete_bucket(Bucket=bucket_name)

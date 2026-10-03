@@ -106,10 +106,10 @@ def provenance_rows() -> list[Row]:
     return read_provenance(PROVENANCE_PATH)
 
 
-def test_read_provenance_real_table_returns_six_rows(
+def test_read_provenance_real_table_returns_seven_rows(
     provenance_rows: list[Row],
 ) -> None:
-    assert len(provenance_rows) == 6
+    assert len(provenance_rows) == 7
 
 
 def test_verify_hashes_real_tree_returns_empty(

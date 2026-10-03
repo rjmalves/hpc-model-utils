@@ -27,6 +27,7 @@ from hpc_model_utils.core.lifecycle.publish import (
 from hpc_model_utils.core.outputs import RealizedOutputs
 from hpc_model_utils.core.run_record import RUN_KIND, RUN_SCHEMA_VERSION
 from hpc_model_utils.core.state import (
+    ExecutionSource,
     FinalizeRecord,
     JobRecord,
     RunState,
@@ -114,6 +115,7 @@ def _state(
     jobs: tuple[JobRecord, ...] = (),
     run_id: str = "run-1",
     reported_job_id: str | None = "222",
+    execution_source: ExecutionSource = ExecutionSource.CLUSTER,
 ) -> RunState:
     state = RunState(
         run_id=run_id,
@@ -122,6 +124,7 @@ def _state(
         jobs=jobs,
         reported_job_id=reported_job_id,
         diagnosis=diagnosis,
+        execution_source=execution_source,
     )
     StateStore(ws).save(state)
     return state
@@ -521,6 +524,88 @@ def test_publish_reused_prefix_500_char_reason_suffix_survives_cap(
 
 def test_annotation_max_length_within_platform_annotation_cap() -> None:
     assert ANNOTATION_MAX_LENGTH <= ANNOTATION_CAP
+
+
+# ---------------------------------------------------------------------------
+# ticket-049 AC5: the offline suffix, joined before the reuse suffix
+# ---------------------------------------------------------------------------
+
+_OFFLINE_SUFFIX = " (imported offline run, not executed on the cluster)"
+
+
+def test_publish_offline_state_no_reuse_annotation_ends_with_offline_suffix(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    _state(
+        ws,
+        diagnosis=_success_diagnosis(),
+        execution_source=ExecutionSource.OFFLINE,
+    )
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, "run-1", outputs)
+
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    annotation = _hooks(channel)[-1].args[0]
+    assert annotation == _success_diagnosis().annotation() + _OFFLINE_SUFFIX
+    assert "prefix reused" not in annotation
+
+
+def test_publish_offline_state_reused_prefix_annotation_joins_offline_then_reuse_suffix(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    _state(
+        ws,
+        diagnosis=_success_diagnosis(),
+        execution_source=ExecutionSource.OFFLINE,
+    )
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, "run-1", outputs)
+
+    store = RecordingObjectStore()
+    _seed_reused_prefix(store, previous_run_id="old")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    annotation = _hooks(channel)[-1].args[0]
+    assert annotation == (
+        _success_diagnosis().annotation()
+        + _OFFLINE_SUFFIX
+        + " (prefix reused; previous run old)"
+    )
+
+
+def test_publish_offline_state_500_char_reason_keeps_both_suffixes_within_cap(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    _state(
+        ws,
+        diagnosis=_success_diagnosis(reason="x" * 500),
+        execution_source=ExecutionSource.OFFLINE,
+    )
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, "run-1", outputs)
+
+    store = RecordingObjectStore()
+    _seed_reused_prefix(store, previous_run_id="old")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    annotation = _hooks(channel)[-1].args[0]
+    suffix = _OFFLINE_SUFFIX + " (prefix reused; previous run old)"
+    assert annotation.endswith(suffix)
+    assert len(annotation) <= ANNOTATION_MAX_LENGTH
 
 
 # ---------------------------------------------------------------------------
