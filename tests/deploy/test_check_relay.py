@@ -185,6 +185,29 @@ def test_check_relay_anomaly_marker_fails(
     assert "log truncated: model-7.out" in result.output
 
 
+def test_check_relay_log_never_appeared_marker_is_an_anomaly_and_fails(
+    tmp_path: Path, relay_logger: tuple[logging.Logger, io.StringIO]
+) -> None:
+    logger, buf = relay_logger
+    job_log = tmp_path / "model-7.out"
+    job_log.write_bytes(_JOB_LOG_BYTES)
+    raw_lines = _raw_job_lines(job_log)
+    content_lines = _relayed_text_lines(logger, buf, raw_lines)
+    marker = "[hpcmu] log never appeared: model-1.out"
+    anomaly_line = _relay(logger, buf, marker)
+    relayed_path = tmp_path / "relayed.txt"
+    _write_relayed(relayed_path, [*content_lines, anomaly_line])
+
+    result = CliRunner().invoke(
+        main, ["--relayed", str(relayed_path), "--job-log", str(job_log)]
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "relay: FAIL" in result.output
+    assert "anomalies=1" in result.output
+    assert f"anomalies:\n  {marker}" in result.output
+
+
 def test_check_relay_ambiguous_marker_in_job_log_fails(
     tmp_path: Path, relay_logger: tuple[logging.Logger, io.StringIO]
 ) -> None:

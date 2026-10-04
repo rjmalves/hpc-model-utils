@@ -19,6 +19,19 @@ an already-open fd trust the attribute cache (F15), which can lag the
 writer by up to ``acregmax``, but a fresh ``open()`` forces a
 revalidation and therefore sees every byte once the job has actually
 finished writing.
+
+Close-to-open does not cover a path that was never opened. While a
+job is PENDING, ``poll()`` keeps trying to open the missing log, so the
+NFS client caches the negative lookup ("no such file") and revalidates
+it only when the parent directory's cached attributes expire, up to
+``acdirmax`` (60 s, F15). A fast-failing job whose log appears just
+before it ends can therefore stay invisible past the settle window
+(M14, run ``e60d6b97``: 30 lines lost). ``ever_opened`` lets the settle
+loop keep polling such a log for ``missing_log_grace``, and ``close()``
+emits a ``log never appeared`` marker instead of losing it silently.
+A job cancelled before it ever ran writes no log, so ``follow()`` skips
+the grace for it (``CANCELLED`` and never seen past PENDING); the
+marker still reports the missing log.
 """
 
 from __future__ import annotations
@@ -123,6 +136,10 @@ def _open_failed_marker(name: str, error: OSError) -> str:
     return f"[hpcmu] log open failed: {name}: {error}"
 
 
+def _never_appeared_marker(name: str) -> str:
+    return f"[hpcmu] log never appeared: {name}"
+
+
 class LogTail:
     """Tail ``path``, surviving truncation and rotation.
 
@@ -141,6 +158,11 @@ class LogTail:
         self._head_prefix = bytearray()
         self._closed = False
         self._last_errno: int | None = None
+        self._ever_opened = False
+
+    @property
+    def ever_opened(self) -> bool:
+        return self._ever_opened
 
     def poll(self) -> list[str]:
         if self._closed:
@@ -168,6 +190,8 @@ class LogTail:
         try:
             fresh_fd = os.open(self._path, os.O_RDONLY)
         except FileNotFoundError:
+            if not self._ever_opened:
+                return [_never_appeared_marker(name)]
             lines = self._drain_held()
             self._close_held()
             return lines
@@ -176,6 +200,7 @@ class LogTail:
             lines.extend(self._drain_held())
             self._close_held()
             return lines
+        self._ever_opened = True
         try:
             lines = self._drain_fresh(fresh_fd, name)
         finally:
@@ -193,6 +218,7 @@ class LogTail:
             return []
         except OSError as exc:
             return self._report_open_error(exc)
+        self._ever_opened = True
         self._last_errno = None
         return []
 
@@ -409,15 +435,20 @@ def _settle(
     attempts: int,
     *,
     settle_window: float,
+    missing_log_grace: float,
     poll_interval: float,
     now: Callable[[], float],
     sleep: Callable[[float], None],
 ) -> FollowResult:
     """ADR-046: full settle, then reopen. Keeps polling the held tail
     for the whole ``settle_window``, never stopping on the first empty
-    poll, then drains the terminal content via ``tail.close()``."""
+    poll, then drains the terminal content via ``tail.close()``. A log
+    that was never opened is polled on for ``missing_log_grace``, so a
+    cached NFS negative lookup can expire."""
     settle_start = now()
-    while now() - settle_start < settle_window:
+    while (elapsed := now() - settle_start) < settle_window or (
+        not tail.ever_opened and elapsed < missing_log_grace
+    ):
         for line in tail.poll():
             emit(line)
         sleep(poll_interval)
@@ -469,6 +500,13 @@ def follow(
             last_output = now()
 
         if st is None or st.state not in NON_TERMINAL_STATES:
+            # A job cancelled before it ran has no log by construction,
+            # so it skips the missing-log grace. Any other terminal
+            # state, and a job already gone from the queue (None),
+            # keep it: a fast-failing job is FAILED or COMPLETED.
+            never_started_cancel = (
+                st is not None and st.state == "CANCELLED" and started is None
+            )
             return _settle(
                 job_id,
                 st.state if st is not None else None,
@@ -476,6 +514,9 @@ def follow(
                 emit,
                 attempts,
                 settle_window=settings.settle_window,
+                missing_log_grace=(
+                    0.0 if never_started_cancel else settings.missing_log_grace
+                ),
                 poll_interval=settings.poll_interval,
                 now=now,
                 sleep=sleep,

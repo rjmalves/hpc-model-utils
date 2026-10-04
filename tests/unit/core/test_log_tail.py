@@ -223,11 +223,65 @@ def test_log_tail_poll_head_recorded_after_truncation_prevents_false_positive(
     assert tail.poll() == ["M2"]
 
 
-def test_log_tail_close_never_opened_tail_returns_empty_list(
+def test_log_tail_close_never_created_path_returns_never_appeared_marker(
     tmp_path: Path,
 ) -> None:
     tail = LogTail(tmp_path / _NAME)
-    assert tail.close() == []
+    assert tail.close() == [f"[hpcmu] log never appeared: {_NAME}"]
+    assert tail.ever_opened is False
+
+
+def test_log_tail_close_opened_then_deleted_path_drains_held_fd_without_marker(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / _NAME
+    path.write_text("L1\n")
+    tail = LogTail(path)
+    assert tail.poll() == ["L1"]
+
+    with path.open("a") as f:
+        f.write("L2\nEND")
+    os.remove(path)
+
+    assert tail.close() == ["L2", "END"]
+
+
+def test_log_tail_ever_opened_is_false_while_path_is_missing(
+    tmp_path: Path,
+) -> None:
+    tail = LogTail(tmp_path / _NAME)
+    assert tail.ever_opened is False
+    assert tail.poll() == []
+    assert tail.ever_opened is False
+
+
+def test_log_tail_ever_opened_turns_true_on_first_open_and_survives_rotation(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / _NAME
+    tail = LogTail(path)
+    assert tail.poll() == []
+
+    path.write_text("OLD1\n")
+    assert tail.poll() == ["OLD1"]
+    assert tail.ever_opened is True
+
+    replacement = tmp_path / "replacement"
+    replacement.write_text("NEW1\n")
+    os.replace(replacement, path)
+    assert tail.poll() == [f"[hpcmu] log rotated: {_NAME}", "NEW1"]
+    assert tail.ever_opened is True
+
+
+def test_log_tail_ever_opened_turns_true_when_close_opens_the_file(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / _NAME
+    path.write_text("L1\n")
+    tail = LogTail(path)
+    assert tail.ever_opened is False
+    assert tail.close() == ["L1"]
+    assert tail.ever_opened is True
 
 
 def test_log_tail_close_called_twice_second_call_returns_empty_list(

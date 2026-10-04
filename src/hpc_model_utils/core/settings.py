@@ -21,6 +21,10 @@ class EngineSettings:
     follow_margin: float = 1800.0
     pending_cap: float = 86400.0
     settle_window: float = 10.0
+    # How long _settle keeps polling a log that was never opened. Exceeds
+    # F15's acdirmax (60 s) plus one poll, so a cached NFS "no such file"
+    # lookup can expire.
+    missing_log_grace: float = 90.0
     squeue_failure_budget: int = 5
     outcome_attempts: int = 6
     outcome_backoff: float = 10.0
@@ -45,6 +49,9 @@ class EngineSettings:
             ),
             settle_window=_float_override(
                 env, "HPCMU_SETTLE_WINDOW", defaults.settle_window
+            ),
+            missing_log_grace=_float_override(
+                env, "HPCMU_MISSING_LOG_GRACE", defaults.missing_log_grace
             ),
             squeue_failure_budget=_int_override(
                 env,

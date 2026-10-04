@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.2] - 2026-10-04
+
+### Fixed
+
+- The job-log relay no longer loses the output of a job that ends before its log file becomes visible on the login node (NFS negative-lookup caching); a log that never appears is reported with an explicit `[hpcmu] log never appeared` marker.
+
+### Added
+
+- `HPCMU_MISSING_LOG_GRACE`: how long the relay keeps looking for a job log it never saw, after the job leaves the queue (default 90 s).
+
 ## [2.0.1] - 2026-10-03
 
 ### Changed
