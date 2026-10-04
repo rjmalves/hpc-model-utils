@@ -1,0 +1,10 @@
+{
+  "taskName": "Remove diretorio temporario da execucao (v2)",
+  "description": "Remove diretorio temporario da execucao",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "2.0.0",
+  "hidden": false,
+  "observation": "Remove diretorio temporario da execucao"
+}

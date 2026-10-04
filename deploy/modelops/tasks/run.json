@@ -1,0 +1,10 @@
+{
+  "taskName": "Executa e acompanha modelo no SLURM (v2)",
+  "description": "Executa o modelo através da submissão de um job ao SLURM e acompanha a",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "2.0.0",
+  "hidden": false,
+  "observation": "Executa o modelo através da submissão de um job ao SLURM e acompanha a execução"
+}

@@ -1,0 +1,10 @@
+{
+  "taskName": "Obtem dados de rodada para upload do S3 (v2)",
+  "description": "Obtem dados de rodada para upload do S3",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "2.0.0",
+  "hidden": false,
+  "observation": "Obtem dados de rodada para upload do S3"
+}

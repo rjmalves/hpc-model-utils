@@ -1,0 +1,10 @@
+{
+  "taskName": "Preprocessamento especifico do modelo (v2)",
+  "description": "Preprocessamento especifico do modelo",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "2.0.0",
+  "hidden": false,
+  "observation": "Preprocessamento especifico do modelo"
+}

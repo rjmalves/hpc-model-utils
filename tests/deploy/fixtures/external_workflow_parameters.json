@@ -1,0 +1,35 @@
+{
+  "Ranqueamento Prospectivo": [
+    "modelName",
+    "utilsAppVersion",
+    "synthesisAppVersion",
+    "awsKeyId",
+    "awsSecretKey",
+    "awsRegion",
+    "outputsBucket",
+    "mpichPath",
+    "slurmPath",
+    "rootPath",
+    "inputFile",
+    "parentPath",
+    "coreCount",
+    "queue",
+    "modelVersion",
+    "path",
+    "jobId",
+    "versionsBucket",
+    "jobTimeoutHours",
+    "simulprospecAppVersion",
+    "evalprospecAppVersion",
+    "rankingAppVersion"
+  ],
+  "Upload Versão": [
+    "modelName",
+    "modelVersion",
+    "executablesFile",
+    "uploadCliVersion",
+    "path",
+    "rootPath",
+    "versionsBucket"
+  ]
+}

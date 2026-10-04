@@ -15,6 +15,7 @@ import re
 import shutil
 import stat
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -372,77 +373,77 @@ def real_bin_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture(scope="module")
-def remote(tmp_path_factory: pytest.TempPathFactory) -> Remote:
+def remote() -> Iterator[Remote]:
     """A bare remote whose commit carries an annotated and a lightweight tag."""
     assert shutil.which("git") is not None, "git not found on PATH"
-    base = tmp_path_factory.mktemp("remote").resolve()
-    home = base / "home"
-    home.mkdir()
-    work = base / "work"
-    work.mkdir()
-    _git(work, home, "-c", "init.defaultBranch=main", "init", "-q")
-    (work / "pyproject.toml").write_text('[project]\nname = "demo-tool"\n')
-    (work / "uv.lock").write_text("version = 1\n")
-    _git(work, home, "add", "pyproject.toml", "uv.lock")
-    _git(work, home, "commit", "-q", "-m", "release")
-    _git(work, home, "tag", "-a", ANNOTATED_TAG, "-m", "annotated release")
-    _git(work, home, "tag", LIGHTWEIGHT_TAG)
-    bare = base / "remote.git"
-    _git(base, home, "clone", "-q", "--bare", str(work), str(bare))
-    commit = _git(work, home, "rev-parse", "HEAD")
-    tag_object = _git(work, home, "rev-parse", ANNOTATED_TAG)
-    assert tag_object != commit
-    return Remote(url=f"file://{bare}", commit=commit, tag_object=tag_object)
+    with tempfile.TemporaryDirectory(prefix="hpcmu-ensure-") as name:
+        base = Path(name).resolve()
+        home = base / "home"
+        home.mkdir()
+        work = base / "work"
+        work.mkdir()
+        _git(work, home, "-c", "init.defaultBranch=main", "init", "-q")
+        (work / "pyproject.toml").write_text('[project]\nname = "demo-tool"\n')
+        (work / "uv.lock").write_text("version = 1\n")
+        _git(work, home, "add", "pyproject.toml", "uv.lock")
+        _git(work, home, "commit", "-q", "-m", "release")
+        _git(work, home, "tag", "-a", ANNOTATED_TAG, "-m", "annotated release")
+        _git(work, home, "tag", LIGHTWEIGHT_TAG)
+        bare = base / "remote.git"
+        _git(base, home, "clone", "-q", "--bare", str(work), str(bare))
+        commit = _git(work, home, "rev-parse", "HEAD")
+        tag_object = _git(work, home, "rev-parse", ANNOTATED_TAG)
+        assert tag_object != commit
+        yield Remote(url=f"file://{bare}", commit=commit, tag_object=tag_object)
 
 
 @pytest.fixture
-def harness(
-    tmp_path: Path, real_bin_dir: Path, remote: Remote
-) -> Iterator[Harness]:
-    base = tmp_path.resolve()
-    bash = real_bin_dir / "bash"
-    bash_path = str(bash.resolve())
-    git_path = str((real_bin_dir / "git").resolve())
+def harness(real_bin_dir: Path, remote: Remote) -> Iterator[Harness]:
+    with tempfile.TemporaryDirectory(prefix="hpcmu-ensure-") as name:
+        base = Path(name).resolve()
+        bash = real_bin_dir / "bash"
+        bash_path = str(bash.resolve())
+        git_path = str((real_bin_dir / "git").resolve())
 
-    shim_dir = base / "shimbin"
-    shim_dir.mkdir()
-    git_shim = shim_dir / "git"
-    git_shim.write_text(
-        _GIT_SHIM.replace("__RECORD__", _RECORD)
-        .replace("__BASH__", bash_path)
-        .replace("__GIT__", git_path)
-    )
-    git_shim.chmod(0o755)
+        shim_dir = base / "shimbin"
+        shim_dir.mkdir()
+        git_shim = shim_dir / "git"
+        git_shim.write_text(
+            _GIT_SHIM.replace("__RECORD__", _RECORD)
+            .replace("__BASH__", bash_path)
+            .replace("__GIT__", git_path)
+        )
+        git_shim.chmod(0o755)
 
-    uv = base / "uvbin" / "uv"
-    uv.parent.mkdir()
-    uv.write_text(
-        _FAKE_UV.replace("__RECORD__", _RECORD)
-        .replace("__BASH__", bash_path)
-        .replace("__PLATFORM__", PLATFORM)
-    )
-    uv.chmod(0o755)
+        uv = base / "uvbin" / "uv"
+        uv.parent.mkdir()
+        uv.write_text(
+            _FAKE_UV.replace("__RECORD__", _RECORD)
+            .replace("__BASH__", bash_path)
+            .replace("__PLATFORM__", PLATFORM)
+        )
+        uv.chmod(0o755)
 
-    smoke_stub = base / "smoke-stub"
-    smoke_stub.write_text(_SMOKE_STUB.replace("__BASH__", bash_path))
-    home = base / "home"
-    home.mkdir()
+        smoke_stub = base / "smoke-stub"
+        smoke_stub.write_text(_SMOKE_STUB.replace("__BASH__", bash_path))
+        home = base / "home"
+        home.mkdir()
 
-    h = Harness(
-        root=base / "tools",
-        uv=uv,
-        bash=bash,
-        path=f"{shim_dir}{os.pathsep}{real_bin_dir}",
-        home=home,
-        uv_calls=base / "uv-calls.jsonl",
-        git_calls=base / "git-calls.jsonl",
-        smoke_calls=base / "smoke-calls.txt",
-        smoke_stub=smoke_stub,
-        remote=remote,
-    )
-    assert re.fullmatch(r"/[A-Za-z0-9._/-]+", str(h.root)), h.root
-    yield h
-    _make_writable(h.root)
+        h = Harness(
+            root=base / "tools",
+            uv=uv,
+            bash=bash,
+            path=f"{shim_dir}{os.pathsep}{real_bin_dir}",
+            home=home,
+            uv_calls=base / "uv-calls.jsonl",
+            git_calls=base / "git-calls.jsonl",
+            smoke_calls=base / "smoke-calls.txt",
+            smoke_stub=smoke_stub,
+            remote=remote,
+        )
+        assert re.fullmatch(r"/[A-Za-z0-9._/-]+", str(h.root)), h.root
+        yield h
+        _make_writable(h.root)
 
 
 _TAG_KINDS = [

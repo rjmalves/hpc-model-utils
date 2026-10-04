@@ -191,6 +191,17 @@ def test_find_platform_identifiers_astral_digit_between_words_returns_canonical_
     assert find_platform_identifiers(value) == ["queue"]
 
 
+@pytest.mark.parametrize(
+    "name",
+    ["utilsAppSha", "synthesisAppSha", "utilsToolDir", "synthesisToolDir"],
+)
+def test_find_platform_identifiers_v2_parameter_name_returns_canonical_name(
+    name: str,
+) -> None:
+    assert name in PLATFORM_IDENTIFIERS
+    assert find_platform_identifiers(name.lower()) == [name]
+
+
 # ---------------------------------------------------------------------------
 # csharp_literal: hypothesis properties (AC2, extended by AM-001)
 # ---------------------------------------------------------------------------
@@ -433,6 +444,31 @@ def test_neutralize_submitted_batch_job_mixed_case_multiple_spaces_defanged() ->
 
 def test_neutralize_tab_whitespace_trigger_defanged() -> None:
     assert neutralize("Submitted\tbatch\tjob") == "Submitted_batch_job"
+
+
+def test_neutralize_hpcmu_tool_trigger_defanged() -> None:
+    assert (
+        neutralize("HPCMU_TOOL hpc-model-utils /x")
+        == "HPCMU_TOOL_hpc-model-utils /x"
+    )
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "HPCMU_TOOL hpc-model-utils /x",
+        "hpcmu_tool\thpc-model-utils /x",
+        "Hpcmu_Tool   x",
+    ],
+)
+def test_neutralize_hpcmu_tool_variants_leave_no_trigger_match(
+    line: str,
+) -> None:
+    assert re.search(r"hpcmu_tool\s", neutralize(line), re.I) is None
+
+
+def test_csharp_literal_hpcmu_tool_trigger_defanged() -> None:
+    assert "HPCMU_TOOL_a" in csharp_literal("HPCMU_TOOL a", 500)
 
 
 def test_neutralize_c0_controls_stripped() -> None:

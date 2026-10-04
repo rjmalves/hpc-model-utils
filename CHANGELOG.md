@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.1] - 2026-10-03
+
+### Changed
+
+- The stdout neutralizer also defangs the `HPCMU_TOOL` phrase, so relayed text cannot rewrite the tool-path parameters of the versioned workflow definitions.
+- The platform-identifier set covers the four parameters the versioned workflow definitions add (`utilsAppSha`, `synthesisAppSha`, `utilsToolDir`, `synthesisToolDir`).
+
+### Added
+
+- `deploy/modelops/`: templated ModelOps Task and Workflow definitions, with a structural publication lint.
+- `deploy/modelops/scripts/ensure-tools.sh`: immutable per-commit tool installs on an exact-patch shared interpreter.
+- A read-only definitions snapshot command (`python -m deploy.modelops.apply snapshot`).
+
 ## [2.0.0] - 2026-10-03
 
 ### Behavior changes

@@ -11,6 +11,7 @@ METADATA_VALUE_CAP = 1000
 TRIGGER_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"created\s+temporary\s+dir", re.I),
     re.compile(r"submitted\s+batch\s+job", re.I),
+    re.compile(r"hpcmu_tool\s+", re.I),
 )
 
 PLATFORM_IDENTIFIERS: frozenset[str] = frozenset(
@@ -38,9 +39,13 @@ PLATFORM_IDENTIFIERS: frozenset[str] = frozenset(
         "rootPath",
         "simulprospecAppVersion",
         "slurmPath",
+        "synthesisAppSha",
         "synthesisAppVersion",
+        "synthesisToolDir",
         "uploadCliVersion",
+        "utilsAppSha",
         "utilsAppVersion",
+        "utilsToolDir",
         "versionsBucket",
     }
 )

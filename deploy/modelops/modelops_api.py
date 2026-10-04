@@ -1,8 +1,11 @@
-"""deploy.modelops.modelops_api: the read-only ModelOps API client
-(ADR-033, R98). ``MODELOPS_TOKEN`` is read from the environment only
-and is redacted out of every exception message this client raises;
-TLS verification always runs through ``ssl.create_default_context()``
-with no flag or variable to turn it off.
+"""deploy.modelops.modelops_api: the ModelOps API client (ADR-033, R98).
+``get_json`` reads; ``put_json`` and ``post_json`` (ticket-063a) write
+through the same opener, timeout and redaction. ``MODELOPS_TOKEN`` is
+read from the environment only and is redacted, with any AWS credential,
+out of every exception message this client raises -- ``redact()`` is the
+one masking function, applied to a full response body before it is cut
+to ``_MAX_BODY_CHARS``; TLS verification always runs through
+``ssl.create_default_context()`` with no flag or variable to turn it off.
 
 Every request goes through a dedicated ``OpenerDirector`` (built fresh
 per call in ``_build_opener()``) rather than ``urlopen()``'s default,
@@ -33,6 +36,7 @@ _TIMEOUT_S = 30.0
 _MAX_BODY_CHARS = 200
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _BEARER_RE = re.compile(r"Bearer\s+\S+")
+_AWS_RE = re.compile(r"AKIA[0-9A-Z]{16}|(?i:aws_secret_access_key=\S+)")
 
 
 class ConfigError(Exception):
@@ -47,7 +51,7 @@ def redact(text: str, token: str) -> str:
     result = _BEARER_RE.sub("<redacted>", text)
     if token:
         result = result.replace(token, "<redacted>")
-    return result
+    return _AWS_RE.sub("<redacted>", result)
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -111,32 +115,48 @@ class ModelOpsClient:
             f"localhost, 127.0.0.1 or ::1): {scheme_host}"
         )
 
-    def get_json(self, path: str) -> Any:
+    def _send(self, method: str, path: str, body: Any = None) -> bytes:
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Accept": "application/json",
+        }
+        data = None
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(body).encode("utf-8")
         request = urllib.request.Request(
             f"{self.base_url}{path}",
-            headers={
-                "Authorization": f"Bearer {self.token}",
-                "Accept": "application/json",
-            },
+            data=data,
+            headers=headers,
+            method=method,
         )
         try:
             with _build_opener().open(request, timeout=_TIMEOUT_S) as response:
-                raw = response.read()
+                payload: bytes = response.read()
         except urllib.error.HTTPError as err:
-            body = redact(
-                err.read().decode("utf-8", errors="replace")[:_MAX_BODY_CHARS],
-                self.token,
-            )
+            text = redact(
+                err.read().decode("utf-8", errors="replace"), self.token
+            )[:_MAX_BODY_CHARS]
             raise ModelOpsApiError(
-                redact(f"GET {path}: HTTP {err.code}: {body}", self.token)
+                redact(f"{method} {path}: HTTP {err.code}: {text}", self.token)
             ) from err
         except (urllib.error.URLError, ssl.SSLError, TimeoutError) as err:
             raise ModelOpsApiError(
-                redact(f"GET {path}: {err}", self.token)
+                redact(f"{method} {path}: {err}", self.token)
             ) from err
+        return payload
+
+    def get_json(self, path: str) -> Any:
+        raw = self._send("GET", path)
         try:
             return json.loads(raw)
         except json.JSONDecodeError as err:
             raise ModelOpsApiError(
                 redact(f"GET {path}: invalid JSON response: {err}", self.token)
             ) from err
+
+    def put_json(self, path: str, body: Any) -> None:
+        self._send("PUT", path, body)
+
+    def post_json(self, path: str, body: Any) -> None:
+        self._send("POST", path, body)
