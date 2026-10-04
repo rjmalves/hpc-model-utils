@@ -1489,7 +1489,7 @@ def test_behavior_execution_id_is_validated_before_any_capture(
 
 
 ENSURE_PYTHON = "3.12.13"
-ENSURE_UTILS_TAG = "v2.0.1"
+ENSURE_UTILS_TAG = "v2.0.2"
 ENSURE_UTILS_SHA = "a" * 40
 ENSURE_SYNTHESIS_TAG = "v2.4.5"
 ENSURE_SYNTHESIS_SHA = "b" * 40
