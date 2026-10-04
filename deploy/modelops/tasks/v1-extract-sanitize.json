@@ -1,0 +1,10 @@
+{
+  "taskName": "Extrai e trata encoding dos dados de entrada do modelo",
+  "description": "Extrai e trata encoding dos dados de entrada do modelo",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "0.0.1",
+  "hidden": false,
+  "observation": "Extrai e trata encoding dos dados de entrada do modelo"
+}

@@ -1,0 +1,10 @@
+{
+  "taskName": "Garante ferramentas versionadas (v2)",
+  "description": "Instala ou reutiliza instalacoes imutaveis de ferramentas, uma por commit",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "2.0.0",
+  "hidden": false,
+  "observation": "Instala ou reutiliza instalacoes imutaveis de ferramentas, uma por commit"
+}

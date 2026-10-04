@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-push secret scan (ADR-049). Activate with:
+#   git config core.hooksPath .githooks
+
+readonly remote_name="$1"
+readonly zero_sha="0000000000000000000000000000000000000000"
+scanned=0
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-push: gitleaks not found; install gitleaks >= 8.19 (ADR-049)" >&2
+  exit 1
+fi
+
+while read -r local_ref local_sha _ remote_sha; do
+  if [[ "$local_sha" == "$zero_sha" ]]; then
+    continue
+  fi
+
+  if [[ "$remote_sha" == "$zero_sha" ]]; then
+    log_opts="${local_sha} --not --remotes=${remote_name}"
+  else
+    log_opts="${remote_sha}..${local_sha}"
+  fi
+
+  if ! gitleaks git --no-banner --redact --log-opts="${log_opts}" .; then
+    echo "pre-push: secret scan failed for ${local_ref}; push refused" >&2
+    exit 1
+  fi
+
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  git archive "$local_sha" | tar -x -C "$tmp"
+
+  if ! gitleaks dir --no-banner --redact "$tmp"; then
+    echo "pre-push: secret scan failed for ${local_ref}; push refused" >&2
+    exit 1
+  fi
+
+  rm -rf "$tmp"
+  scanned=$((scanned + 1))
+done
+
+echo "pre-push: secret scan passed (${scanned} ref(s))"

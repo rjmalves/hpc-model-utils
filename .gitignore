@@ -33,3 +33,7 @@ plans/
 
 # Claude Code
 .claude/
+
+# ModelOps environment files: real values never enter the tree (ADR-031)
+deploy/modelops/env/*.json
+!deploy/modelops/env/*.example.json

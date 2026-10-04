@@ -1,0 +1,10 @@
+{
+  "taskName": "Obtem executaveis dos modelos do S3",
+  "description": "Obtem executaveis dos modelos do S3",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "0.0.1",
+  "hidden": false,
+  "observation": "Obtem executaveis dos modelos do S3"
+}

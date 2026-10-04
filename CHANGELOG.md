@@ -4,6 +4,59 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.1] - 2026-10-03
+
+### Changed
+
+- The stdout neutralizer also defangs the `HPCMU_TOOL` phrase, so relayed text cannot rewrite the tool-path parameters of the versioned workflow definitions.
+- The platform-identifier set covers the four parameters the versioned workflow definitions add (`utilsAppSha`, `synthesisAppSha`, `utilsToolDir`, `synthesisToolDir`).
+
+### Added
+
+- `deploy/modelops/`: templated ModelOps Task and Workflow definitions, with a structural publication lint.
+- `deploy/modelops/scripts/ensure-tools.sh`: immutable per-commit tool installs on an exact-patch shared interpreter.
+- A read-only definitions snapshot command (`python -m deploy.modelops.apply snapshot`).
+
+## [2.0.0] - 2026-10-03
+
+### Behavior changes
+
+- DECOMP max iterations (no convergence) now calls `SetRuntimeError` instead of `SetModelError`.
+- DECOMP negative optimality gap now calls `SetRuntimeError` instead of `SetModelError`.
+- A crashed DECOMP run, or one missing `relato`, now calls `SetRuntimeError` instead of `SetModelError`.
+- A NEWAVE full run whose final simulation lacks the simulated-series cost table now calls `SetRuntimeError` instead of `SetSuccess`.
+- A NEWAVE run with no `pmo.dat` now calls `SetRuntimeError`, where v1 called `SetDataError`
+  (or `SetSuccess` for a consistency run).
+- A job ended by timeout, node failure, licence failure or cancellation now calls `SetRuntimeError` (`TIMEOUT`/`INFRA_ERROR`/`LICENSE_ERROR`/`CANCELLED`) instead of depending on incidental output parsing.
+- A successful run whose sintetizador or postprocess step failed still calls `SetSuccess`, but the reason is now prefixed `synthesis failed:`/`postprocess failed:` and `synthesis_status=failed` is recorded.
+- A successful run with a missing sintetizador now calls `SetRuntimeError` (`core.synthesis_missing`) instead of `SetSuccess`.
+- See [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md) for the full comparison and the operator delivery checklist.
+
+### Added
+
+- The v2 `hpc_model_utils` engine with typed run state (`.hpcmu/state.json`).
+- Kebab-case command aliases.
+- `saidas/run.json`.
+- Per-phase job logs under `saidas/logs/`.
+- `saidas/relgnl.<ext>` for DECOMP.
+- `run --synthesis-bin`.
+- `HPCMU_*` engine tunables.
+- Signal-driven cancellation of submitted jobs.
+
+### Changed
+
+- The `hpc-model-utils` console script now runs `hpc_model_utils.cli:main`.
+- A missing sintetizador on a successful run is an annotated `RUNTIME_ERROR`.
+- `botocore` and `cfinterface` are now declared direct dependencies.
+- Production workflows adopt 2.0.0 only after a pre-rollout validation of the new workflow copies; until then they keep their current pins.
+
+### Removed
+
+- DESSEM and GEVAZP.
+- The `output_compression_and_cleanup`, `download_executed_run` and `fetch_extract_raw_outputs` commands.
+- `assets/jobs/*`.
+- The `idessem` and `pytz` dependencies.
+
 ## [1.1.2] - 2026-07-22
 
 ### Fixed

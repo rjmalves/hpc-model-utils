@@ -1,0 +1,10 @@
+{
+  "taskName": "Obtem dados de entrada do S3",
+  "description": "Copia os dados de entrada do S3 para o diretorio de execucao",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "0.0.1",
+  "hidden": false,
+  "observation": "Copia os dados de entrada do S3 para o diretorio de execucao"
+}

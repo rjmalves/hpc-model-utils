@@ -1,0 +1,77 @@
+{
+  "kind": "hpcmu.run",
+  "schema_version": 1,
+  "run_id": "fixed-run-id",
+  "tool": {
+    "name": "hpc-model-utils",
+    "version": "2.0.0"
+  },
+  "model": {
+    "plugin": "newave",
+    "name": "NEWAVE",
+    "version": "29"
+  },
+  "study": {
+    "name": "case-01",
+    "starting_date": "2024-01-01"
+  },
+  "parent": {
+    "path": "s3://hpcmu-parents/case-00",
+    "model_name": "NEWAVE",
+    "starting_date": "2024-01-01"
+  },
+  "execution_source": "OFFLINE",
+  "jobs": [
+    {
+      "phase": "model",
+      "job_id": "111",
+      "submitted_at": "2024-01-01T00:00:00+00:00",
+      "log": "saidas/logs/model-111.out"
+    },
+    {
+      "phase": "finalize",
+      "job_id": "222",
+      "submitted_at": "2024-01-01T01:00:00+00:00",
+      "log": "saidas/logs/finalize-222.out"
+    }
+  ],
+  "diagnosis": {
+    "status": "SUCCESS",
+    "rule_id": "core.ok",
+    "reason": "model converged",
+    "evidence": [
+      {
+        "layer": "log",
+        "source": "model.out",
+        "detail": "done"
+      }
+    ],
+    "matched": [
+      "core.ok"
+    ],
+    "job_id": "222",
+    "at": "2024-01-01T02:00:00+00:00"
+  },
+  "steps": [
+    {
+      "command": "submit-model",
+      "host": "login01",
+      "started_at": "2024-01-01T00:00:00+00:00",
+      "finished_at": "2024-01-01T00:00:05+00:00",
+      "duration_seconds": 5.0,
+      "outcome": "ok"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "cortes.zip",
+      "bytes": 65536
+    },
+    {
+      "path": "pmo.dat",
+      "bytes": 4096
+    }
+  ],
+  "reuse": null,
+  "published_at": "2026-01-01T00:00:00+00:00"
+}

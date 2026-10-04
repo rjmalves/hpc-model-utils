@@ -1,0 +1,80 @@
+{
+  "_meta": {
+    "legacy_version": "1.1.2",
+    "script": "tests/goldens/v1_1_2/capture.py",
+    "upload_newave_order": "executables-first"
+  },
+  "sequences": {
+    "decomp_no_parent": {
+      "commands": [
+        "check_and_fetch_executables(\"s3://versions-bucket/versoes/decomp/32.0/\")",
+        "check_and_fetch_inputs(\"s3://inputs-bucket/ingest/deck_decomp.zip\", \"\", delete=False)",
+        "extract_sanitize_inputs()",
+        "generate_execution_status(\"2001\")"
+      ],
+      "metadata.modelops": "{\"model_name\": \"DECOMP\", \"model_version\": \"32.0\", \"study_starting_date\": \"2025-11-01T00:00:00+00:00\", \"study_name\": \"PMO - NOVEMBRO/25 - DEZEMBRO/25 - REV 0 - FCF COM CVAR - 12 REE - VALOR ESP\", \"job_id\": \"2001\", \"status\": \"SUCCESS\"}",
+      "status.modelops": "SUCCESS"
+    },
+    "decomp_with_parent": {
+      "commands": [
+        "check_and_fetch_executables(\"s3://versions-bucket/versoes/decomp/32.0/\")",
+        "check_and_fetch_inputs(\"s3://inputs-bucket/ingest/deck_decomp.zip\", \"s3://outputs-bucket/artifacts/parenthash02\", delete=False)",
+        "extract_sanitize_inputs()",
+        "generate_execution_status(\"2001\")"
+      ],
+      "metadata.modelops": "{\"model_name\": \"DECOMP\", \"model_version\": \"32.0\", \"parent_path\": \"s3://outputs-bucket/artifacts/parenthash02\", \"parent_starting_date\": \"2025-11-01T00:00:00+00:00\", \"study_starting_date\": \"2025-11-01T00:00:00+00:00\", \"study_name\": \"PMO - NOVEMBRO/25 - DEZEMBRO/25 - REV 0 - FCF COM CVAR - 12 REE - VALOR ESP\", \"job_id\": \"2001\", \"status\": \"SUCCESS\"}",
+      "status.modelops": "SUCCESS"
+    },
+    "newave_no_parent": {
+      "commands": [
+        "check_and_fetch_executables(\"s3://versions-bucket/versoes/newave/30.0.4/\")",
+        "check_and_fetch_inputs(\"s3://inputs-bucket/ingest/deck_newave.zip\", \"\", delete=False)",
+        "extract_sanitize_inputs()",
+        "generate_execution_status(\"1001\")"
+      ],
+      "metadata.modelops": "{\"model_name\": \"NEWAVE\", \"model_version\": \"30.0.4\", \"parent_path\": \"\", \"study_starting_date\": \"2025-11-01T00:00:00+00:00\", \"study_name\": \"PMO - NOVEMBRO - 2025 - Niveis para 01/11 - NW Versao 30.0.4\", \"job_id\": \"1001\", \"status\": \"SUCCESS\"}",
+      "status.modelops": "SUCCESS"
+    },
+    "newave_offline": {
+      "commands": [
+        "check_and_fetch_executables(\"s3://versions-bucket/versoes/newave/30.0.4/\")",
+        "ingest_offline_run(\"s3://inputs-bucket/ingest/offline/inputs.zip\", \"s3://inputs-bucket/ingest/offline/outputs.zip\", \"s3://inputs-bucket/ingest/offline/cortes.zip\")",
+        "generate_execution_status(\"1005\")"
+      ],
+      "metadata.modelops": "{\"model_name\": \"NEWAVE\", \"model_version\": \"30.0.4\", \"study_starting_date\": \"2025-11-01T00:00:00+00:00\", \"study_name\": \"PMO - NOVEMBRO - 2025 - Niveis para 01/11 - NW Versao 30.0.4\", \"execution_source\": \"OFFLINE\", \"job_id\": \"1005\", \"status\": \"SUCCESS\"}",
+      "status.modelops": "SUCCESS"
+    },
+    "newave_toolbox_bare": {
+      "commands": [
+        "generate_execution_status(\"777\")"
+      ],
+      "metadata.modelops": "{\"job_id\": \"777\", \"status\": \"SUCCESS\"}",
+      "status.modelops": "SUCCESS"
+    },
+    "newave_toolbox_existing_metadata": {
+      "commands": [
+        "metadata.modelops pre-seeded with {\"model_name\": \"NEWAVE\", \"study_name\": \"old\"}",
+        "generate_execution_status(\"778\")"
+      ],
+      "metadata.modelops": "{\"model_name\": \"NEWAVE\", \"study_name\": \"old\", \"job_id\": \"778\", \"status\": \"SUCCESS\"}",
+      "status.modelops": "SUCCESS"
+    },
+    "newave_toolbox_no_job_id": {
+      "commands": [
+        "generate_execution_status(\"\")"
+      ],
+      "metadata.modelops": "{\"job_id\": \"\", \"status\": \"SUCCESS\"}",
+      "status.modelops": "SUCCESS"
+    },
+    "newave_with_parent": {
+      "commands": [
+        "check_and_fetch_executables(\"s3://versions-bucket/versoes/newave/30.0.4/\")",
+        "check_and_fetch_inputs(\"s3://inputs-bucket/ingest/deck_newave.zip\", \"s3://outputs-bucket/artifacts/parenthash01\", delete=False)",
+        "extract_sanitize_inputs()",
+        "generate_execution_status(\"1001\")"
+      ],
+      "metadata.modelops": "{\"model_name\": \"NEWAVE\", \"model_version\": \"30.0.4\", \"parent_path\": \"s3://outputs-bucket/artifacts/parenthash01\", \"parent_starting_date\": \"2025-10-01T00:00:00+00:00\", \"study_starting_date\": \"2025-11-01T00:00:00+00:00\", \"study_name\": \"PMO - NOVEMBRO - 2025 - Niveis para 01/11 - NW Versao 30.0.4\", \"job_id\": \"1001\", \"status\": \"SUCCESS\"}",
+      "status.modelops": "SUCCESS"
+    }
+  }
+}

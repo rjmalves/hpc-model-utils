@@ -3,7 +3,7 @@ version: '3.8'
 services:
   localstack:
     container_name: hpc-model-utils-localstack
-    image: localstack/localstack:3.0
+    image: localstack/localstack:3.8
     ports:
       - "4566:4566"
     environment:

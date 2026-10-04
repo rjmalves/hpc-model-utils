@@ -1,0 +1,10 @@
+{
+  "taskName": "Cancela job submetido na fila do SLURM (v2)",
+  "description": "Cancela um job que foi submetido à fila do SLURM para uma rodada",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "2.0.0",
+  "hidden": false,
+  "observation": "Cancela um job que foi submetido à fila do SLURM para uma rodada"
+}

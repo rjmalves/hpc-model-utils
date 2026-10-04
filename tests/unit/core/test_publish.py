@@ -1,0 +1,864 @@
+"""ADR-042/ADR-012/ADR-028/R13/R15/R56/R115/R55/R5/R14/R136 tests for
+the ``publish`` lifecycle step (ticket-040)."""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+
+import pytest
+
+from hpc_model_utils.core.diagnosis import (
+    ANNOTATION_MAX_LENGTH,
+    Diagnosis,
+    RunStatus,
+    utc_now_iso,
+)
+from hpc_model_utils.core.errors import (
+    StateFormatError,
+    StorageError,
+    UsageError,
+)
+from hpc_model_utils.core.lifecycle.publish import (
+    publish,
+    validate_artifacts_prefix,
+)
+from hpc_model_utils.core.outputs import RealizedOutputs
+from hpc_model_utils.core.run_record import RUN_KIND, RUN_SCHEMA_VERSION
+from hpc_model_utils.core.state import (
+    ExecutionSource,
+    FinalizeRecord,
+    JobRecord,
+    RunState,
+    StateStore,
+    StepOutcome,
+    ToolInfo,
+    write_finalize,
+)
+from hpc_model_utils.core.workspace import Phase, Workspace
+from hpc_model_utils.infra.s3 import S3Uri
+from hpc_model_utils.platform.encoding import ANNOTATION_CAP
+from hpc_model_utils.platform.modelops import Reporter
+from tests.support.fake_plugin import FakePlugin
+from tests.support.hooks import Hook, parse_hooks
+from tests.support.object_store import RecordingObjectStore
+
+_BUCKET = "test-bucket"
+_HASH = "a" * 64
+
+
+class _ListChannel:
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def write_line(self, line: str) -> None:
+        self.lines.append(line)
+
+
+def _hooks(channel: _ListChannel) -> list[Hook]:
+    return parse_hooks("\n".join(channel.lines))
+
+
+def _uri(*, hash_: str = _HASH) -> str:
+    return f"s3://{_BUCKET}/artifacts/{hash_}/"
+
+
+def _key(name: str) -> str:
+    return f"artifacts/{_HASH}/{name}"
+
+
+def _s3(name: str) -> S3Uri:
+    return S3Uri(_BUCKET, _key(name))
+
+
+def _base(name: str = "") -> str:
+    return f"s3://{_BUCKET}/{_key(name)}"
+
+
+def _upload_keys(store: RecordingObjectStore) -> list[str]:
+    base = _base()
+    return [uri[len(base) :] for op, uri in store.ops if op == "upload"]
+
+
+class _CapturingObjectStore(RecordingObjectStore):
+    """Like ``RecordingObjectStore``, but also keeps the exact bytes
+    of each successful upload in order -- needed to tell a pre-marker
+    PUT's RUNTIME_ERROR payload apart from a later PUT to the same
+    key, since the backing dict only ever holds the latest value."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.uploaded: list[tuple[str, bytes]] = []
+
+    def upload(self, src: Path, uri: S3Uri) -> None:
+        data = src.read_bytes()
+        super().upload(src, uri)
+        self.uploaded.append((str(uri), data))
+
+
+def _uploaded_keys(store: _CapturingObjectStore) -> list[str]:
+    base = _base()
+    return [key[len(base) :] for key, _ in store.uploaded]
+
+
+def _ws(tmp_path: Path) -> Workspace:
+    workspace = Workspace.at(tmp_path)
+    workspace.ensure_layout()
+    return workspace
+
+
+def _state(
+    ws: Workspace,
+    *,
+    diagnosis: Diagnosis | None,
+    jobs: tuple[JobRecord, ...] = (),
+    run_id: str = "run-1",
+    reported_job_id: str | None = "222",
+    execution_source: ExecutionSource = ExecutionSource.CLUSTER,
+) -> RunState:
+    state = RunState(
+        run_id=run_id,
+        plugin="fake",
+        tool=ToolInfo(name="hpc-model-utils", version="2.0.0"),
+        jobs=jobs,
+        reported_job_id=reported_job_id,
+        diagnosis=diagnosis,
+        execution_source=execution_source,
+    )
+    StateStore(ws).save(state)
+    return state
+
+
+def _success_diagnosis(reason: str = "model converged") -> Diagnosis:
+    return Diagnosis(
+        status=RunStatus.SUCCESS,
+        rule_id="core.ok",
+        reason=reason,
+        at=utc_now_iso(),
+    )
+
+
+def _write_finalize(
+    ws: Workspace, run_id: str, outputs: RealizedOutputs | None
+) -> None:
+    write_finalize(
+        ws,
+        FinalizeRecord(
+            run_id=run_id,
+            diagnosis=_success_diagnosis(),
+            postprocess=StepOutcome("postprocess", True, "", 0.1),
+            synthesis=StepOutcome("synthesis", True, "", 0.1),
+            outputs=outputs,
+        ),
+    )
+
+
+def _write_log(ws: Workspace, phase: Phase, job_id: str) -> str:
+    path = ws.log_path(phase, job_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(f"{phase} {job_id} log\n".encode())
+    return ws.relative(path)
+
+
+def _full_realized(ws: Workspace) -> RealizedOutputs:
+    (ws.root / "eco_deck.zip").write_bytes(b"eco-bytes")
+    (ws.outputs_dir / "deck_processado.zip").write_bytes(b"deck-bytes")
+    (ws.outputs_dir / "cortes.zip").write_bytes(b"cortes-bytes")
+    (ws.root / "pmo.dat").write_bytes(b"pmo-bytes")
+    return RealizedOutputs(
+        deck=".hpcmu/outputs/deck_processado.zip",
+        archives=(".hpcmu/outputs/cortes.zip",),
+        raw=(("pmo.dat", "pmo.dat"),),
+    )
+
+
+def _write_sintese(ws: Workspace, name: str = "x.parquet") -> None:
+    sintese = ws.root / "sintese"
+    sintese.mkdir(parents=True, exist_ok=True)
+    (sintese / name).write_bytes(b"parquet-bytes")
+
+
+def _status_of(store: RecordingObjectStore, name: str) -> str:
+    return store.get_bytes(_s3(name)).decode("ascii")
+
+
+def _metadata_status(store: RecordingObjectStore, name: str) -> str:
+    data = json.loads(store.get_bytes(_s3(name)).decode("ascii"))
+    status = data["status"]
+    assert isinstance(status, str)
+    return status
+
+
+# ---------------------------------------------------------------------------
+# validate_artifacts_prefix -- the prefix validation table (Requirement 1)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_artifacts_prefix_empty_key_raises_usage_error() -> None:
+    with pytest.raises(UsageError, match="invalid artifacts prefix"):
+        validate_artifacts_prefix(f"s3://{_BUCKET}/")
+
+
+def test_validate_artifacts_prefix_empty_final_segment_raises_usage_error() -> (
+    None
+):
+    with pytest.raises(UsageError, match="invalid artifacts prefix"):
+        validate_artifacts_prefix(f"s3://{_BUCKET}/artifacts//")
+
+
+def test_validate_artifacts_prefix_valid_hash_strips_trailing_slash() -> None:
+    result = validate_artifacts_prefix(_uri())
+    assert result == S3Uri(_BUCKET, f"artifacts/{_HASH}")
+
+
+def test_validate_artifacts_prefix_malformed_uri_raises_usage_error() -> None:
+    with pytest.raises(UsageError, match="invalid artifacts prefix"):
+        validate_artifacts_prefix("not-an-s3-uri")
+
+
+# ---------------------------------------------------------------------------
+# Amendment rule 1: check_artifacts_path runs before any S3 call or hook
+# ---------------------------------------------------------------------------
+
+
+def test_publish_uri_rejected_by_check_artifacts_path_raises_usage_error_with_no_ops(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    _state(ws, diagnosis=_success_diagnosis())
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+    # accepted by validate_artifacts_prefix (non-empty final segment),
+    # rejected by Reporter.check_artifacts_path (not 64 hex chars).
+    bad_uri = f"s3://{_BUCKET}/artifacts/short-hash/"
+
+    with pytest.raises(UsageError, match="invalid artifacts uri"):
+        publish(ws, FakePlugin(), store, reporter, StateStore(ws), bad_uri)
+
+    assert store.ops == []
+    assert channel.lines == []
+
+
+# ---------------------------------------------------------------------------
+# AC2: a SUCCESS run with realized outputs on a fresh prefix
+# ---------------------------------------------------------------------------
+
+
+def test_publish_success_fresh_prefix_uploads_in_requirement_order(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    model_log = _write_log(ws, Phase.MODEL, "111")
+    finalize_log = _write_log(ws, Phase.FINALIZE, "222")
+    state = _state(
+        ws,
+        diagnosis=_success_diagnosis(),
+        jobs=(
+            JobRecord(Phase.MODEL, "111", utc_now_iso(), model_log),
+            JobRecord(Phase.FINALIZE, "222", utc_now_iso(), finalize_log),
+        ),
+    )
+    outputs = _full_realized(ws)
+    _write_finalize(ws, state.run_id, outputs)
+    _write_sintese(ws)
+
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert _upload_keys(store) == [
+        "entradas/eco_deck.zip",
+        "entradas/deck_processado.zip",
+        "saidas/cortes.zip",
+        "saidas/pmo.dat",
+        "saidas/logs/model-111.out",
+        "saidas/logs/finalize-222.out",
+        "sintese/x.parquet",
+        "saidas/status.modelops",
+        "saidas/run.json",
+        "saidas/metadata.modelops",
+    ]
+
+    run_json = json.loads(store.get_bytes(_s3("saidas/run.json")))
+    metadata_entry = next(
+        entry
+        for entry in run_json["artifacts"]
+        if entry["path"] == "saidas/metadata.modelops"
+    )
+    assert metadata_entry["bytes"] == len(
+        store.get_bytes(_s3("saidas/metadata.modelops"))
+    )
+
+    assert _hooks(channel) == [
+        Hook("SetExecutionArtifactsPath", (_uri(),)),
+        Hook("SetSuccess", ()),
+        Hook("SetAnnotation", (_success_diagnosis().annotation(),)),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# AC3: an upload failure midway on a fresh prefix
+# ---------------------------------------------------------------------------
+
+
+def test_publish_fresh_prefix_upload_failure_raises_storage_error_and_halts(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    outputs = RealizedOutputs(
+        deck=None,
+        # alphabetical, as a real ``realize()`` call would sort them: one
+        # PUT succeeds before ``relatorios.zip`` fails, so the best-effort
+        # overwrite condition (Requirement 3.1) is satisfied.
+        archives=(".hpcmu/outputs/cortes.zip", ".hpcmu/outputs/relatorios.zip"),
+        raw=(),
+    )
+    (ws.outputs_dir / "cortes.zip").write_bytes(b"cortes-bytes")
+    (ws.outputs_dir / "relatorios.zip").write_bytes(b"rel-bytes")
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = RecordingObjectStore()
+    store.fail_on("relatorios.zip")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    with pytest.raises(StorageError, match="relatorios.zip"):
+        publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    keys = _upload_keys(store)
+    assert keys[:2] == ["saidas/cortes.zip", "saidas/relatorios.zip"]
+    # nothing past the failure point is uploaded except the best-effort
+    # RUNTIME_ERROR overwrite of the commit marker and its status pair.
+    assert keys[2:] == ["saidas/metadata.modelops", "saidas/status.modelops"]
+    assert (
+        _metadata_status(store, "saidas/metadata.modelops") == "RUNTIME_ERROR"
+    )
+    hooks = _hooks(channel)
+    assert hooks == [Hook("SetExecutionArtifactsPath", (_uri(),))]
+
+
+# ---------------------------------------------------------------------------
+# AC4/AC5: a reused prefix
+# ---------------------------------------------------------------------------
+
+
+def _seed_reused_prefix(
+    store: RecordingObjectStore, *, previous_run_id: str | None = "old"
+) -> None:
+    store.seed(_s3("saidas/pmo.dat"), b"old-pmo")
+    store.seed(_s3("saidas/metadata.modelops"), b'{"status": "SUCCESS"}')
+    if previous_run_id is not None:
+        store.seed(
+            _s3("saidas/run.json"),
+            json.dumps(
+                {
+                    "kind": RUN_KIND,
+                    "schema_version": RUN_SCHEMA_VERSION,
+                    "run_id": previous_run_id,
+                }
+            ).encode("utf-8"),
+        )
+    # reset ops recorded by seeding so tests only see publish()'s own ops.
+    store.ops.clear()
+
+
+def test_publish_reused_prefix_identified_previous_run_overwrites_then_republishes(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    # a real entradas/ upload (eco_deck.zip + the realized deck) so the
+    # "both pre-marker PUTs come before any entradas/ PUT" claim (AC4)
+    # is actually exercised, not vacuously true.
+    (ws.root / "eco_deck.zip").write_bytes(b"eco-bytes")
+    (ws.outputs_dir / "deck_processado.zip").write_bytes(b"deck-bytes")
+    outputs = RealizedOutputs(
+        deck=".hpcmu/outputs/deck_processado.zip", archives=(), raw=()
+    )
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = _CapturingObjectStore()
+    _seed_reused_prefix(store, previous_run_id="old")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    keys = _upload_keys(store)
+    assert keys[:2] == ["saidas/metadata.modelops", "saidas/status.modelops"]
+    assert keys[-1] == "saidas/metadata.modelops"
+    assert _metadata_status(store, "saidas/metadata.modelops") == "SUCCESS"
+
+    # the pre-marker's own two PUTs carried the RUNTIME_ERROR failure
+    # pair, both strictly before the first entradas/ PUT.
+    uploaded_keys = _uploaded_keys(store)
+    assert uploaded_keys[:2] == [
+        "saidas/metadata.modelops",
+        "saidas/status.modelops",
+    ]
+    pre_metadata_status = json.loads(store.uploaded[0][1])["status"]
+    pre_status_token = store.uploaded[1][1].decode("ascii")
+    assert pre_metadata_status == "RUNTIME_ERROR"
+    assert pre_status_token == "RUNTIME_ERROR"
+
+    first_entradas_index = next(
+        index
+        for index, key in enumerate(uploaded_keys)
+        if key.startswith("entradas/")
+    )
+    assert first_entradas_index >= 2
+    assert {"entradas/eco_deck.zip", "entradas/deck_processado.zip"} <= set(
+        uploaded_keys
+    )
+
+    final_key, final_data = store.uploaded[-1]
+    assert final_key.endswith("saidas/metadata.modelops")
+    assert json.loads(final_data)["status"] == "SUCCESS"
+
+    run_json = json.loads(store.get_bytes(_s3("saidas/run.json")))
+    assert run_json["reuse"]["detected"] is True
+    assert run_json["reuse"]["previous_run_id"] == "old"
+
+    assert "delete" not in [op for op, _ in store.ops]
+
+    hooks = _hooks(channel)
+    annotation_hook = hooks[-1]
+    assert annotation_hook.args[0].endswith("(prefix reused; previous run old)")
+
+
+def test_publish_reused_prefix_upload_failure_keeps_metadata_at_runtime_error(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    outputs = RealizedOutputs(
+        deck=None, archives=(".hpcmu/outputs/cortes.zip",), raw=()
+    )
+    (ws.outputs_dir / "cortes.zip").write_bytes(b"cortes-bytes")
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = RecordingObjectStore()
+    _seed_reused_prefix(store, previous_run_id="old")
+    store.fail_on("cortes.zip")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    with pytest.raises(StorageError, match="cortes.zip"):
+        publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert (
+        _metadata_status(store, "saidas/metadata.modelops") == "RUNTIME_ERROR"
+    )
+
+
+def test_publish_reused_prefix_unidentified_previous_run_annotation(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = RecordingObjectStore()
+    _seed_reused_prefix(store, previous_run_id=None)
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    annotation_hook = _hooks(channel)[-1]
+    assert annotation_hook.args[0].endswith(
+        "(prefix reused; previous run unidentified)"
+    )
+
+
+def test_publish_no_reuse_annotation_has_no_reuse_suffix(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    annotation_hook = _hooks(channel)[-1]
+    assert annotation_hook.args[0] == _success_diagnosis().annotation()
+    assert "prefix reused" not in annotation_hook.args[0]
+
+
+# ---------------------------------------------------------------------------
+# Amendment rule 2: the reuse suffix always survives the annotation cap
+# ---------------------------------------------------------------------------
+
+
+def test_publish_reused_prefix_500_char_reason_suffix_survives_cap(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis(reason="x" * 500))
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = RecordingObjectStore()
+    _seed_reused_prefix(store, previous_run_id="old")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    annotation = _hooks(channel)[-1].args[0]
+    suffix = " (prefix reused; previous run old)"
+    assert annotation.endswith(suffix)
+    assert len(annotation) <= ANNOTATION_MAX_LENGTH
+
+
+def test_annotation_max_length_within_platform_annotation_cap() -> None:
+    assert ANNOTATION_MAX_LENGTH <= ANNOTATION_CAP
+
+
+# ---------------------------------------------------------------------------
+# ticket-049 AC5: the offline suffix, joined before the reuse suffix
+# ---------------------------------------------------------------------------
+
+_OFFLINE_SUFFIX = " (imported offline run, not executed on the cluster)"
+
+
+def test_publish_offline_state_no_reuse_annotation_ends_with_offline_suffix(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    _state(
+        ws,
+        diagnosis=_success_diagnosis(),
+        execution_source=ExecutionSource.OFFLINE,
+    )
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, "run-1", outputs)
+
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    annotation = _hooks(channel)[-1].args[0]
+    assert annotation == _success_diagnosis().annotation() + _OFFLINE_SUFFIX
+    assert "prefix reused" not in annotation
+
+
+def test_publish_offline_state_reused_prefix_annotation_joins_offline_then_reuse_suffix(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    _state(
+        ws,
+        diagnosis=_success_diagnosis(),
+        execution_source=ExecutionSource.OFFLINE,
+    )
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, "run-1", outputs)
+
+    store = RecordingObjectStore()
+    _seed_reused_prefix(store, previous_run_id="old")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    annotation = _hooks(channel)[-1].args[0]
+    assert annotation == (
+        _success_diagnosis().annotation()
+        + _OFFLINE_SUFFIX
+        + " (prefix reused; previous run old)"
+    )
+
+
+def test_publish_offline_state_500_char_reason_keeps_both_suffixes_within_cap(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    _state(
+        ws,
+        diagnosis=_success_diagnosis(reason="x" * 500),
+        execution_source=ExecutionSource.OFFLINE,
+    )
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, "run-1", outputs)
+
+    store = RecordingObjectStore()
+    _seed_reused_prefix(store, previous_run_id="old")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    annotation = _hooks(channel)[-1].args[0]
+    suffix = _OFFLINE_SUFFIX + " (prefix reused; previous run old)"
+    assert annotation.endswith(suffix)
+    assert len(annotation) <= ANNOTATION_MAX_LENGTH
+
+
+# ---------------------------------------------------------------------------
+# Requirement 4: a failing pre-marker PUT stops before any artifact
+# ---------------------------------------------------------------------------
+
+
+def test_publish_reused_prefix_premarker_failure_stops_before_any_artifact(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    outputs = _full_realized(ws)
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = RecordingObjectStore()
+    _seed_reused_prefix(store, previous_run_id="old")
+    store.fail_on("metadata.modelops")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    with pytest.raises(StorageError, match="pre-marker"):
+        publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert _upload_keys(store) == ["saidas/metadata.modelops"]
+    assert _hooks(channel) == [Hook("SetExecutionArtifactsPath", (_uri(),))]
+
+
+# ---------------------------------------------------------------------------
+# a failing failure-pair PUT is logged and never masks the original error
+# ---------------------------------------------------------------------------
+
+
+def test_publish_failing_best_effort_overwrite_is_logged_and_original_error_wins(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    outputs = RealizedOutputs(
+        deck=None,
+        archives=(".hpcmu/outputs/cortes.zip",),
+        raw=(),
+    )
+    (ws.root / "eco_deck.zip").write_bytes(b"eco-bytes")
+    (ws.outputs_dir / "cortes.zip").write_bytes(b"cortes-bytes")
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = RecordingObjectStore()
+    store.fail_on("cortes.zip")
+    store.fail_on("metadata.modelops")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(StorageError, match="cortes.zip") as excinfo:
+            publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert "metadata.modelops" not in str(excinfo.value)
+    assert any(
+        "metadata.modelops" in record.message for record in caplog.records
+    )
+
+
+# ---------------------------------------------------------------------------
+# Amendment rule 3: an OSError from a vanished raw file is an upload failure
+# ---------------------------------------------------------------------------
+
+
+def test_publish_vanished_raw_file_os_error_gives_failure_pair_then_storage_error(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    outputs = RealizedOutputs(
+        deck=None, archives=(), raw=(("missing.rv0", "missing.rv0"),)
+    )
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = RecordingObjectStore()
+    _seed_reused_prefix(store, previous_run_id="old")
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    with pytest.raises(StorageError, match="missing.rv0"):
+        publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert (
+        _metadata_status(store, "saidas/metadata.modelops") == "RUNTIME_ERROR"
+    )
+    assert _hooks(channel) == [Hook("SetExecutionArtifactsPath", (_uri(),))]
+
+
+# ---------------------------------------------------------------------------
+# Epic-02 boundary finding 3: a staging write failure must name the
+# artifact it was staging, not whatever the last successful upload was.
+# ---------------------------------------------------------------------------
+
+
+def test_publish_run_json_staging_write_os_error_names_run_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    outputs = RealizedOutputs(deck=None, archives=(), raw=())
+    _write_finalize(ws, state.run_id, outputs)
+
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    original_write_bytes = Path.write_bytes
+
+    def _write_bytes(self: Path, data: bytes) -> int:
+        if self.name == "run.json":
+            raise OSError("disk full")
+        return original_write_bytes(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", _write_bytes)
+
+    with pytest.raises(StorageError, match="saidas/run.json"):
+        publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+
+# ---------------------------------------------------------------------------
+# Requirement 2.3: the no-diagnosis fallback
+# ---------------------------------------------------------------------------
+
+
+def test_publish_no_diagnosis_falls_back_to_runtime_error(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    _state(ws, diagnosis=None)
+
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    reloaded = StateStore(ws).load()
+    assert reloaded is not None
+    assert reloaded.diagnosis is not None
+    assert reloaded.diagnosis.status is RunStatus.RUNTIME_ERROR
+    assert reloaded.diagnosis.rule_id == "core.no_diagnosis"
+    assert ws.legacy_metadata_path.is_file()
+    assert ws.legacy_status_path.read_text(encoding="ascii") == "RUNTIME_ERROR"
+    assert (
+        _metadata_status(store, "saidas/metadata.modelops") == "RUNTIME_ERROR"
+    )
+    assert _hooks(channel)[:2] == [
+        Hook("SetExecutionArtifactsPath", (_uri(),)),
+        Hook("SetRuntimeError", ()),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Testing Requirements: a missing finalize.json still uploads logs/projections
+# ---------------------------------------------------------------------------
+
+
+def test_publish_missing_finalize_json_still_uploads_logs_and_projections(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    model_log = _write_log(ws, Phase.MODEL, "111")
+    _state(
+        ws,
+        diagnosis=Diagnosis(
+            status=RunStatus.RUNTIME_ERROR,
+            rule_id="core.finalize_crashed",
+            reason="finalize crashed",
+            at=utc_now_iso(),
+        ),
+        jobs=(JobRecord(Phase.MODEL, "111", utc_now_iso(), model_log),),
+    )
+    assert not ws.finalize_path.exists()
+
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert _upload_keys(store) == [
+        "saidas/logs/model-111.out",
+        "saidas/status.modelops",
+        "saidas/run.json",
+        "saidas/metadata.modelops",
+    ]
+    assert _status_of(store, "saidas/status.modelops") == "RUNTIME_ERROR"
+
+
+# ---------------------------------------------------------------------------
+# ticket-038 amendment 2 consistency: an unreadable finalize.json (OSError)
+# is treated like a missing/invalid record, not a fatal error
+# ---------------------------------------------------------------------------
+
+
+def test_publish_load_finalize_os_error_treated_as_missing_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ws = _ws(tmp_path)
+    model_log = _write_log(ws, Phase.MODEL, "111")
+    _state(
+        ws,
+        diagnosis=_success_diagnosis(),
+        jobs=(JobRecord(Phase.MODEL, "111", utc_now_iso(), model_log),),
+    )
+
+    def _raise_os_error(ws: Workspace, run_id: str) -> None:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(
+        "hpc_model_utils.core.lifecycle.publish.load_finalize",
+        _raise_os_error,
+    )
+
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert _upload_keys(store) == [
+        "saidas/logs/model-111.out",
+        "saidas/status.modelops",
+        "saidas/run.json",
+        "saidas/metadata.modelops",
+    ]
+    assert _status_of(store, "saidas/status.modelops") == "SUCCESS"
+    assert _hooks(channel) == [
+        Hook("SetExecutionArtifactsPath", (_uri(),)),
+        Hook("SetSuccess", ()),
+        Hook("SetAnnotation", (_success_diagnosis().annotation(),)),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# A missing state.json is a StateFormatError
+# ---------------------------------------------------------------------------
+
+
+def test_publish_missing_state_raises_state_format_error(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    store = RecordingObjectStore()
+    channel = _ListChannel()
+    reporter = Reporter(channel, enabled=True)
+
+    with pytest.raises(StateFormatError, match="state.json"):
+        publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert store.ops == []
+    assert channel.lines == []

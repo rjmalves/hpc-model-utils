@@ -1,0 +1,18 @@
+# ticket-053: the C1 golden-parse fixture (R10/R69/R104). Every value
+# is a `{placeholder}` token; no real cluster queue name, S3 bucket
+# name, or host path ever appears here. Rendered through
+# tests.support.command_lines.render.
+fetch_executables: check_and_fetch_executables {model} {versions_uri}
+fetch_inputs: check_and_fetch_inputs {model} {input_uri} --parent-path {parent_path} --delete
+fetch_inputs_empty_parent: check_and_fetch_inputs {model} {input_uri} --parent-path '' --delete
+fetch_inputs_quoted_empty_parent: check_and_fetch_inputs {model} {input_uri} --parent-path "''" --delete
+extract_sanitize: extract_sanitize_inputs {model}
+preprocess: preprocess {model} --execution-name {execution_name}
+run_full: run {model} {queue} {cores} --max-cores-per-node {max_cores_per_node} --max-job-time-hours {max_job_time_hours} --mpich-path {mpich_path} --slurm-path {slurm_path}
+run_minimal: run {model} {queue} {cores}
+run_skip: run {model} {queue} {cores} --mpich-path {mpich_path} --slurm-path {slurm_path} --skip
+run_synthesis_bin: run {model} {queue} {cores} --mpich-path {mpich_path} --slurm-path {slurm_path} --synthesis-bin {synthesis_bin}
+result_upload: result_upload {model} {artifacts_uri}
+cancel: cancel_run {model} --job-id {job_id} --slurm-path {slurm_path}
+cancel_empty_job_id: cancel_run {model} --job-id '' --slurm-path {slurm_path}
+ingest_offline: ingest_offline_run {model} {inputs_uri} {outputs_uri} {cuts_uri}
