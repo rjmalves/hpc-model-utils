@@ -64,6 +64,7 @@ class FakeTail(LogTail):
         self._polls = dict(polls or {})
         self._count = 0
         self._close_lines = close_lines or []
+        self._ever_opened = True
 
     def poll(self) -> list[str]:
         lines = self._polls.get(self._count, [])
@@ -489,6 +490,173 @@ def test_follow_settle_window_with_real_log_tail_drains_late_write(
     assert result.last_state == "COMPLETED"
 
 
+def test_follow_log_opened_before_job_ends_settles_for_settle_window_only(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "model-1.out"
+    path.write_text("L1\n")
+    clock = FakeClock()
+    slurm = TimedSlurm(clock.now, [(float("inf"), _js(state="COMPLETED"))])
+    settings = EngineSettings(settle_window=5.0, poll_interval=1.0)
+    emitted: list[str] = []
+    follow(
+        _ID,
+        LogTail(path),
+        slurm,
+        emitted.append,
+        settings=settings,
+        now=clock.now,
+        sleep=clock.sleep,
+    )
+    assert emitted == ["L1"]
+    assert (
+        settings.settle_window
+        <= clock.t
+        <= settings.settle_window + settings.poll_interval
+    )
+
+
+def test_follow_log_visible_after_settle_window_within_grace_is_relayed_once(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "model-1.out"
+    clock = FakeClock()
+    slurm = TimedSlurm(clock.now, [(float("inf"), _js(state="COMPLETED"))])
+    settings = EngineSettings(
+        settle_window=10.0, poll_interval=2.0, missing_log_grace=90.0
+    )
+    visible_at = settings.settle_window + 30.0
+    assert visible_at < settings.missing_log_grace
+
+    def sleep(seconds: float) -> None:
+        clock.sleep(seconds)
+        if clock.t >= visible_at and not path.exists():
+            path.write_text("L1\nL2\nL3\n")
+
+    emitted: list[str] = []
+    follow(
+        _ID,
+        LogTail(path),
+        slurm,
+        emitted.append,
+        settings=settings,
+        now=clock.now,
+        sleep=sleep,
+    )
+    assert emitted == ["L1", "L2", "L3"]
+
+
+def test_follow_log_never_appearing_emits_one_marker_after_the_grace(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "model-1.out"
+    clock = FakeClock()
+    slurm = TimedSlurm(clock.now, [(float("inf"), _js(state="COMPLETED"))])
+    settings = EngineSettings(
+        settle_window=10.0, poll_interval=2.0, missing_log_grace=90.0
+    )
+    emitted: list[str] = []
+    result = follow(
+        _ID,
+        LogTail(path),
+        slurm,
+        emitted.append,
+        settings=settings,
+        now=clock.now,
+        sleep=clock.sleep,
+    )
+    assert emitted == ["[hpcmu] log never appeared: model-1.out"]
+    assert (
+        settings.missing_log_grace
+        <= clock.t
+        <= settings.missing_log_grace + settings.poll_interval
+    )
+    assert result.last_state == "COMPLETED"
+
+
+def test_follow_pending_then_cancelled_without_log_skips_the_grace(
+    tmp_path: Path,
+) -> None:
+    clock = FakeClock()
+    pending = _js(state="PENDING", reason="Dependency")
+    cancelled_at = 6.0
+    slurm = TimedSlurm(
+        clock.now,
+        [(cancelled_at, pending), (float("inf"), _js(state="CANCELLED"))],
+    )
+    settings = EngineSettings(
+        settle_window=10.0, poll_interval=2.0, missing_log_grace=90.0
+    )
+    emitted: list[str] = []
+    result = follow(
+        _ID,
+        LogTail(tmp_path / "finalize-1.out"),
+        slurm,
+        emitted.append,
+        settings=settings,
+        now=clock.now,
+        sleep=clock.sleep,
+    )
+    assert emitted == ["[hpcmu] log never appeared: finalize-1.out"]
+    assert (
+        settings.settle_window
+        <= clock.t - cancelled_at
+        <= settings.settle_window + settings.poll_interval
+    )
+    assert result.last_state == "CANCELLED"
+
+
+@pytest.mark.parametrize(
+    ("early", "terminal"),
+    [
+        pytest.param(
+            _js(
+                state="RUNNING",
+                time_limit=timedelta(hours=2),
+                start_time=datetime(2026, 1, 1),
+            ),
+            _js(state="CANCELLED"),
+            id="running-then-cancelled",
+        ),
+        pytest.param(
+            _js(state="PENDING", reason="Dependency"),
+            _js(state="FAILED"),
+            id="pending-then-failed",
+        ),
+        pytest.param(
+            _js(state="PENDING", reason="Dependency"),
+            None,
+            id="pending-then-gone",
+        ),
+    ],
+)
+def test_follow_log_never_appearing_keeps_the_grace_unless_cancelled_unstarted(
+    tmp_path: Path, early: JobState, terminal: JobState | None
+) -> None:
+    clock = FakeClock()
+    ended_at = 4.0
+    slurm = TimedSlurm(clock.now, [(ended_at, early), (float("inf"), terminal)])
+    settings = EngineSettings(
+        settle_window=10.0, poll_interval=2.0, missing_log_grace=90.0
+    )
+    emitted: list[str] = []
+    follow(
+        _ID,
+        LogTail(tmp_path / "model-1.out"),
+        slurm,
+        emitted.append,
+        settings=settings,
+        now=clock.now,
+        sleep=clock.sleep,
+    )
+    assert emitted == ["[hpcmu] log never appeared: model-1.out"]
+    assert (
+        settings.missing_log_grace
+        <= clock.t - ended_at
+        <= settings.missing_log_grace + settings.poll_interval
+    )
+
+
 def test_follow_none_job_state_counts_as_gone_with_last_state_none() -> None:
     clock = FakeClock()
     slurm = TimedSlurm(clock.now, [(float("inf"), None)])
@@ -583,6 +751,7 @@ def test_from_env_valid_overrides_parses_every_field(
         "HPCMU_FOLLOW_MARGIN": "900",
         "HPCMU_PENDING_CAP": "43200",
         "HPCMU_SETTLE_WINDOW": "20",
+        "HPCMU_MISSING_LOG_GRACE": "120",
         "HPCMU_SQUEUE_FAILURE_BUDGET": "3",
         "HPCMU_OUTCOME_ATTEMPTS": "4",
         "HPCMU_OUTCOME_BACKOFF": "5",
@@ -596,6 +765,7 @@ def test_from_env_valid_overrides_parses_every_field(
         follow_margin=900.0,
         pending_cap=43200.0,
         settle_window=20.0,
+        missing_log_grace=120.0,
         squeue_failure_budget=3,
         outcome_attempts=4,
         outcome_backoff=5.0,
@@ -613,6 +783,23 @@ def test_from_env_empty_string_override_is_treated_as_unset() -> None:
 def test_from_env_invalid_float_raises_usage_error(raw: str) -> None:
     with pytest.raises(UsageError, match="HPCMU_POLL_INTERVAL"):
         EngineSettings.from_env({"HPCMU_POLL_INTERVAL": raw})
+
+
+def test_from_env_missing_log_grace_override_parses_to_float() -> None:
+    settings = EngineSettings.from_env({"HPCMU_MISSING_LOG_GRACE": "120"})
+    assert settings.missing_log_grace == 120.0
+
+
+def test_from_env_missing_log_grace_absent_defaults_to_90_seconds() -> None:
+    assert EngineSettings.from_env({}).missing_log_grace == 90.0
+
+
+@pytest.mark.parametrize("raw", ["0", "-1", "inf", "x"])
+def test_from_env_missing_log_grace_invalid_raises_usage_error(
+    raw: str,
+) -> None:
+    with pytest.raises(UsageError, match="HPCMU_MISSING_LOG_GRACE"):
+        EngineSettings.from_env({"HPCMU_MISSING_LOG_GRACE": raw})
 
 
 def test_from_env_relative_cli_bin_raises_usage_error() -> None:

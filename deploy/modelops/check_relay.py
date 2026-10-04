@@ -53,6 +53,7 @@ _ANOMALY_PREFIXES = (
     "[hpcmu] log rotated: ",
     "[hpcmu] log reopen failed: ",
     "[hpcmu] log open failed: ",
+    "[hpcmu] log never appeared: ",
 )
 _LINE_SPLIT_RE = re.compile(r"\r\n|\r|\n")
 
