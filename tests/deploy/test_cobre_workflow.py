@@ -4,6 +4,7 @@ The ``check_*`` functions take the ``deploy/modelops`` directory so a mutated
 copy in ``tmp_path`` is checked the same way as the real tree. The behavior
 tests render ``cobre-run`` and ``ensure-utils`` the way ModelOps does and run
 them under real bash against a stub CLI, reusing the idiom suite's sandboxes.
+Ticket-074 adds the Upload Versao check: the ``cobre`` option and the CLI pin.
 """
 
 from __future__ import annotations
@@ -95,6 +96,9 @@ PARAMETER_NAMES = (
     "jobTimeoutHours",
 )
 UTILS_TAG = "v2.1.0"
+UPLOAD_WORKFLOW = "workflows/upload-versao.json"
+UPLOAD_MODEL_OPTIONS = ["newave", "decomp", "cobre"]
+UPLOAD_CLI_TAG = "v1.1.0"
 
 # name -> (type, defaultValue, visible, regexPattern, format, options)
 SHAPES: dict[str, tuple[str, str, bool, str, str, list[str]]] = {
@@ -334,6 +338,25 @@ def check_ensure_utils(root: Path) -> list[str]:
     return errors
 
 
+def check_upload_versao(root: Path) -> list[str]:
+    errors: list[str] = []
+    params = _params(_load(root / UPLOAD_WORKFLOW))
+    model = params.get("modelName", {})
+    if model.get("options") != UPLOAD_MODEL_OPTIONS:
+        errors.append(
+            f"{UPLOAD_WORKFLOW}: modelName options are not"
+            f" {UPLOAD_MODEL_OPTIONS}"
+        )
+    if model.get("defaultValue") != "newave":
+        errors.append(f"{UPLOAD_WORKFLOW}: modelName default is not newave")
+    cli = params.get("uploadCliVersion", {})
+    if cli.get("defaultValue") != UPLOAD_CLI_TAG:
+        errors.append(
+            f"{UPLOAD_WORKFLOW}: uploadCliVersion is not {UPLOAD_CLI_TAG}"
+        )
+    return errors
+
+
 @pytest.fixture
 def tree(tmp_path: Path) -> Path:
     for name in ("workflows", "tasks"):
@@ -341,8 +364,12 @@ def tree(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _rewrite(root: Path, change: Callable[[dict[str, Any]], None]) -> None:
-    path = root / WORKFLOW
+def _rewrite(
+    root: Path,
+    change: Callable[[dict[str, Any]], None],
+    workflow: str = WORKFLOW,
+) -> None:
+    path = root / workflow
     doc = _load(path)
     change(doc)
     path.write_text(
@@ -641,6 +668,39 @@ def test_check_ensure_utils_mutated_copy_is_reported(
 
     with pytest.raises(AssertionError, match=message):
         require(check_ensure_utils(tree))
+
+
+def _drop_cobre_option(doc: dict[str, Any]) -> None:
+    _parameter(doc, "modelName")["options"].remove("cobre")
+
+
+def _cobre_default(doc: dict[str, Any]) -> None:
+    _parameter(doc, "modelName")["defaultValue"] = "cobre"
+
+
+def _old_upload_cli(doc: dict[str, Any]) -> None:
+    _parameter(doc, "uploadCliVersion")["defaultValue"] = "v1.0.0"
+
+
+def test_upload_versao_offers_cobre_with_cli_v1_1_0() -> None:
+    require(check_upload_versao(MODELOPS))
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (_drop_cobre_option, r"modelName options are not"),
+        (_cobre_default, r"modelName default is not newave"),
+        (_old_upload_cli, r"uploadCliVersion is not v1\.1\.0"),
+    ],
+)
+def test_check_upload_versao_mutated_copy_is_reported(
+    tree: Path, mutation: Callable[[dict[str, Any]], None], message: str
+) -> None:
+    _rewrite(tree, mutation, UPLOAD_WORKFLOW)
+
+    with pytest.raises(AssertionError, match=message):
+        require(check_upload_versao(tree))
 
 
 def _cobre_values(sandbox: Layout) -> dict[str, str]:
