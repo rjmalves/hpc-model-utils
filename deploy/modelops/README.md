@@ -48,9 +48,13 @@ The apply script takes the real file through its required `--env-file` option.
 }
 ```
 
-`protectedTaskIds` lists every Task `_id` that exists live, including Tasks of
-Workflows this tree does not manage: the repository only ever writes Task
-documents it created.
+`protectedTaskIds` lists every live Task `_id` the repository must not write,
+including Tasks of Workflows this tree does not manage: the apply refuses a
+change to a listed Task. The seven ids the ticket-067 switch overwrote in
+place (`cancel-run`, `extract-sanitize`, `fetch-inputs`, `ingest-offline`,
+`preprocess`, `result-upload`, `run`) left the list, because those documents
+now hold the v2 content under their original names (R89 as amended
+2026-10-05).
 
 Real files never enter this tree. `.gitignore` excludes
 `deploy/modelops/env/*.json` except `*.example.json`, as defense in depth
@@ -61,11 +65,12 @@ CI secret scan.
 
 ## The `v1-` baseline
 
-The Tasks prefixed `v1-` and the three Workflows are the export of what runs
-today. They are shared and protected: the apply script never writes them. They
-are the zero-diff reference for the dry run against live, the rollback target,
-and the authoring source of the v2 Tasks, which take the plain names. The `v1-`
-Tasks are deleted when the rollback window closes (ticket-067).
+The `v1-` prefix marks a legacy Task exported verbatim. It is protected, never
+written, and exempt from the idiom lint. The five that remain
+(`v1-create-workdir`, `v1-remove-workdir`, `v1-fetch-executables`,
+`v1-clone-hpc-model-utils`, `v1-clone-sintetizador-newave`) are still
+referenced by Ranqueamento Prospectivo and Upload Versão, so the dry run keeps
+proving that they have not drifted. They are retired at ticket-067c.
 
 ## Operator entry point
 

@@ -1,33 +1,11 @@
 {
   "workflowName": "NEWAVE - PEM",
   "workflowDescription": "Execucao de NEWAVE para testes e validação",
-  "version": "0.0.1",
+  "version": "2.0.0",
   "cancelationCriteria": "",
   "sshConnectionId": "@@env:sshConnectionId@@",
   "timeout": 0,
   "parameters": [
-    {
-      "description": "AWS KEY ID",
-      "name": "awsKeyId",
-      "type": "String",
-      "defaultValue": "",
-      "visible": false,
-      "regexPattern": "",
-      "format": "",
-      "order": 0,
-      "options": []
-    },
-    {
-      "description": "AWS SECRET KEY",
-      "name": "awsSecretKey",
-      "type": "String",
-      "defaultValue": "",
-      "visible": false,
-      "regexPattern": "",
-      "format": "",
-      "order": 1,
-      "options": []
-    },
     {
       "description": "AWS DEFAULT REGION",
       "name": "awsRegion",
@@ -36,7 +14,7 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 2,
+      "order": 0,
       "options": []
     },
     {
@@ -47,7 +25,7 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 3,
+      "order": 1,
       "options": []
     },
     {
@@ -58,7 +36,7 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 4,
+      "order": 2,
       "options": []
     },
     {
@@ -69,7 +47,7 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 5,
+      "order": 3,
       "options": []
     },
     {
@@ -80,7 +58,7 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 6,
+      "order": 4,
       "options": []
     },
     {
@@ -91,7 +69,7 @@
       "visible": true,
       "regexPattern": "",
       "format": "",
-      "order": 7,
+      "order": 5,
       "options": []
     },
     {
@@ -102,7 +80,7 @@
       "visible": true,
       "regexPattern": "",
       "format": "",
-      "order": 8,
+      "order": 6,
       "options": []
     },
     {
@@ -113,7 +91,7 @@
       "visible": true,
       "regexPattern": "",
       "format": "",
-      "order": 9,
+      "order": 7,
       "options": []
     },
     {
@@ -124,7 +102,7 @@
       "visible": true,
       "regexPattern": "",
       "format": "",
-      "order": 10,
+      "order": 8,
       "options": [
         "@@env:queueNewave@@",
         "@@env:queueDecomp@@",
@@ -139,7 +117,7 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 11,
+      "order": 9,
       "options": []
     },
     {
@@ -150,7 +128,7 @@
       "visible": true,
       "regexPattern": "",
       "format": "",
-      "order": 12,
+      "order": 10,
       "options": [
         "29.4.1",
         "30.0.4",
@@ -196,7 +174,7 @@
       "visible": false,
       "regexPattern": "(?<=Created temporary dir\\s)(/[^ ]+)",
       "format": "{0}",
-      "order": 13,
+      "order": 11,
       "options": []
     },
     {
@@ -207,6 +185,28 @@
       "visible": false,
       "regexPattern": "Submitted batch job (\\d+)",
       "format": "{1}",
+      "order": 12,
+      "options": []
+    },
+    {
+      "description": "Diretorio versionado do hpc-model-utils, capturado do ensure-tools",
+      "name": "utilsToolDir",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "HPCMU_TOOL hpc-model-utils (/\\S+)",
+      "format": "{1}",
+      "order": 13,
+      "options": []
+    },
+    {
+      "description": "Diretorio versionado do sintetizador-newave, capturado do ensure-tools",
+      "name": "synthesisToolDir",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "HPCMU_TOOL sintetizador-newave (/\\S+)",
+      "format": "{1}",
       "order": 14,
       "options": []
     },
@@ -214,11 +214,22 @@
       "description": "Versao do hpc-model-utils a ser utilizada",
       "name": "utilsAppVersion",
       "type": "String",
-      "defaultValue": "v1.1.1",
+      "defaultValue": "v2.0.2",
       "visible": false,
       "regexPattern": "",
       "format": "",
       "order": 15,
+      "options": []
+    },
+    {
+      "description": "Commit do hpc-model-utils fixado junto com a versao",
+      "name": "utilsAppSha",
+      "type": "String",
+      "defaultValue": "13f5c0516496d2f5e45ac63ea1178d7211ee3b8f",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 16,
       "options": []
     },
     {
@@ -229,7 +240,18 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 16,
+      "order": 17,
+      "options": []
+    },
+    {
+      "description": "Commit do sintetizador-newave fixado junto com a versao",
+      "name": "synthesisAppSha",
+      "type": "String",
+      "defaultValue": "00305719ee16d92d02d645364bf054e7c9cb673d",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 18,
       "options": []
     },
     {
@@ -240,7 +262,7 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 17,
+      "order": 19,
       "options": []
     },
     {
@@ -251,85 +273,71 @@
       "visible": true,
       "regexPattern": "",
       "format": "",
-      "order": 18,
+      "order": 20,
       "options": []
     }
   ],
   "workflowTasks": [
     {
+      "workflowTaskId": "d8a78a36-7908-4e1e-a045-95e2c34cfd51",
+      "alias": null,
+      "taskId": "@@task:ensure-tools@@",
+      "executionCriteria": "",
+      "onFailure": 1
+    },
+    {
       "workflowTaskId": "3af8b15c-bccf-4031-a866-232417da90ba",
       "alias": null,
-      "taskId": "@@task:v1-create-workdir@@",
-      "executionCriteria": "",
-      "onFailure": 1
-    },
-    {
-      "workflowTaskId": "eb99d164-4aea-4aba-b16c-e84646d03628",
-      "alias": null,
-      "taskId": "@@task:v1-clone-hpc-model-utils@@",
-      "executionCriteria": "",
-      "onFailure": 1
-    },
-    {
-      "workflowTaskId": "5c45bb67-c7c9-4827-9f4e-d7cf0358dafb",
-      "alias": null,
-      "taskId": "@@task:v1-clone-sintetizador-newave@@",
+      "taskId": "@@task:create-workdir@@",
       "executionCriteria": "",
       "onFailure": 1
     },
     {
       "workflowTaskId": "ef6153e2-7c9e-46b3-bb20-5cd2d664859f",
       "alias": null,
-      "taskId": "@@task:v1-fetch-executables@@",
+      "taskId": "@@task:fetch-executables@@",
       "executionCriteria": "",
       "onFailure": 1
     },
     {
       "workflowTaskId": "1d16934f-fec0-47d6-8fb9-72f9447f2612",
       "alias": null,
-      "taskId": "@@task:v1-fetch-inputs@@",
+      "taskId": "@@task:fetch-inputs@@",
       "executionCriteria": "",
       "onFailure": 1
     },
     {
       "workflowTaskId": "ccd23b31-abe7-4beb-ae35-357866f879b7",
       "alias": null,
-      "taskId": "@@task:v1-extract-sanitize@@",
+      "taskId": "@@task:extract-sanitize@@",
       "executionCriteria": "",
       "onFailure": 1
     },
     {
       "workflowTaskId": "ce68b099-ec33-4623-9692-4a1f7065447b",
       "alias": null,
-      "taskId": "@@task:v1-preprocess@@",
+      "taskId": "@@task:preprocess@@",
       "executionCriteria": "",
       "onFailure": 1
     },
     {
       "workflowTaskId": "f7bab42a-5f53-42a8-92ec-a7434c1d35ad",
       "alias": null,
-      "taskId": "@@task:v1-run@@",
-      "executionCriteria": "",
-      "onFailure": 1
-    },
-    {
-      "workflowTaskId": "7aee66bf-a099-4aae-abc7-98e062d70d4a",
-      "alias": null,
-      "taskId": "@@task:v1-list-files@@",
+      "taskId": "@@task:run@@",
       "executionCriteria": "",
       "onFailure": 1
     },
     {
       "workflowTaskId": "6bd551d0-77f7-4525-84a8-20caa91a55ca",
       "alias": null,
-      "taskId": "@@task:v1-result-upload@@",
+      "taskId": "@@task:result-upload@@",
       "executionCriteria": "",
       "onFailure": 1
     },
     {
       "workflowTaskId": "1074ebb6-3f9f-4db7-a514-fe6cae0ee85e",
       "alias": null,
-      "taskId": "@@task:v1-remove-workdir@@",
+      "taskId": "@@task:remove-workdir@@",
       "executionCriteria": "",
       "onFailure": 1
     }
@@ -338,13 +346,13 @@
     {
       "workflowTaskId": "22575b67-021b-4c08-a08a-c98fd65fbed5",
       "alias": null,
-      "taskId": "@@task:v1-cancel-run@@",
+      "taskId": "@@task:cancel-run@@",
       "executionCriteria": ""
     },
     {
       "workflowTaskId": "544e60b4-f9b3-44c0-837d-a1dc7d498f81",
       "alias": null,
-      "taskId": "@@task:v1-remove-workdir@@",
+      "taskId": "@@task:remove-workdir@@",
       "executionCriteria": ""
     }
   ],
@@ -377,7 +385,7 @@
       "type": "taskNode"
     },
     {
-      "workflowTaskId": "eb99d164-4aea-4aba-b16c-e84646d03628",
+      "workflowTaskId": "d8a78a36-7908-4e1e-a045-95e2c34cfd51",
       "measured": {
         "height": 182,
         "width": 288
@@ -385,18 +393,6 @@
       "position": {
         "x": 100,
         "y": 250
-      },
-      "type": "taskNode"
-    },
-    {
-      "workflowTaskId": "5c45bb67-c7c9-4827-9f4e-d7cf0358dafb",
-      "measured": {
-        "height": 182,
-        "width": 288
-      },
-      "position": {
-        "x": 100,
-        "y": 500
       },
       "type": "taskNode"
     },
@@ -457,18 +453,6 @@
       "position": {
         "x": 100,
         "y": 1750
-      },
-      "type": "taskNode"
-    },
-    {
-      "workflowTaskId": "7aee66bf-a099-4aae-abc7-98e062d70d4a",
-      "measured": {
-        "height": 182,
-        "width": 288
-      },
-      "position": {
-        "x": 100,
-        "y": 2000
       },
       "type": "taskNode"
     },
@@ -563,21 +547,16 @@
     {
       "criteriaExpression": "true",
       "sourceWorkflowTaskId": null,
+      "targetWorkflowTaskId": "d8a78a36-7908-4e1e-a045-95e2c34cfd51"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "d8a78a36-7908-4e1e-a045-95e2c34cfd51",
       "targetWorkflowTaskId": "3af8b15c-bccf-4031-a866-232417da90ba"
     },
     {
       "criteriaExpression": "true",
       "sourceWorkflowTaskId": "3af8b15c-bccf-4031-a866-232417da90ba",
-      "targetWorkflowTaskId": "eb99d164-4aea-4aba-b16c-e84646d03628"
-    },
-    {
-      "criteriaExpression": "true",
-      "sourceWorkflowTaskId": "eb99d164-4aea-4aba-b16c-e84646d03628",
-      "targetWorkflowTaskId": "5c45bb67-c7c9-4827-9f4e-d7cf0358dafb"
-    },
-    {
-      "criteriaExpression": "true",
-      "sourceWorkflowTaskId": "5c45bb67-c7c9-4827-9f4e-d7cf0358dafb",
       "targetWorkflowTaskId": "ef6153e2-7c9e-46b3-bb20-5cd2d664859f"
     },
     {
@@ -603,11 +582,6 @@
     {
       "criteriaExpression": "true",
       "sourceWorkflowTaskId": "f7bab42a-5f53-42a8-92ec-a7434c1d35ad",
-      "targetWorkflowTaskId": "7aee66bf-a099-4aae-abc7-98e062d70d4a"
-    },
-    {
-      "criteriaExpression": "true",
-      "sourceWorkflowTaskId": "7aee66bf-a099-4aae-abc7-98e062d70d4a",
       "targetWorkflowTaskId": "6bd551d0-77f7-4525-84a8-20caa91a55ca"
     },
     {

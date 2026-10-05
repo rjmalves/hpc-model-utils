@@ -23,6 +23,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -445,11 +446,18 @@ def test_lint_covers_exactly_the_ten_v2_scripts_and_ensure_tools() -> None:
 
 def test_lint_v1_baseline_is_not_checked(tasks: Path) -> None:
     for path in tasks.glob("*.sh"):
-        if path.stem not in ("extract-sanitize", "v1-run", "v1-remove-workdir"):
+        if path.stem not in (
+            "extract-sanitize",
+            "v1-fetch-executables",
+            "v1-remove-workdir",
+        ):
             path.unlink()
 
     require(check_scripts(tasks))
-    assert lint_script("v1-run", (tasks / "v1-run.sh").read_text("utf-8"))
+    assert lint_script(
+        "v1-fetch-executables",
+        (tasks / "v1-fetch-executables.sh").read_text("utf-8"),
+    )
 
 
 def test_lint_without_a_v2_script_is_an_error(tasks: Path) -> None:
@@ -855,21 +863,125 @@ def test_scripts_pass_bash_syntax_check(slug: str) -> None:
     assert (result.returncode, result.stderr) == (0, "")
 
 
-@pytest.mark.parametrize("slug", SLUGS)
-def test_task_documents_follow_the_v1_documents(slug: str) -> None:
-    v1 = json.loads((TASKS / f"v1-{slug}.json").read_text(encoding="utf-8"))
-    v2 = json.loads((TASKS / f"{slug}.json").read_text(encoding="utf-8"))
-
-    assert v2 == {
-        "taskName": f"{v1['taskName']} (v2)",
-        "description": v1["description"],
+TASK_DOCUMENTS: dict[str, dict[str, Any]] = {
+    "create-workdir": {
+        "taskName": "Cria diretorio temporario para execucao (NEWAVE/DECOMP)",
+        "description": "Cria diretorio temporario para execucao de modelo",
         "scriptType": "BASH",
         "tags": [],
         "parameters": [],
         "version": "2.0.0",
         "hidden": False,
-        "observation": v1["observation"],
-    }
+        "observation": "Cria diretório temporário para execução de modelo",
+    },
+    "fetch-executables": {
+        "taskName": "Obtem executaveis dos modelos do S3 (NEWAVE/DECOMP)",
+        "description": "Obtem executaveis dos modelos do S3",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Obtem executaveis dos modelos do S3",
+    },
+    "fetch-inputs": {
+        "taskName": "Obtem dados de entrada do S3",
+        "description": "Copia os dados de entrada do S3 para o diretorio de execucao",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Copia os dados de entrada do S3 para o diretorio de execucao",
+    },
+    "extract-sanitize": {
+        "taskName": "Extrai e trata encoding dos dados de entrada do modelo",
+        "description": "Extrai e trata encoding dos dados de entrada do modelo",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Extrai e trata encoding dos dados de entrada do modelo",
+    },
+    "preprocess": {
+        "taskName": "Preprocessamento especifico do modelo",
+        "description": "Preprocessamento especifico do modelo",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Preprocessamento especifico do modelo",
+    },
+    "run": {
+        "taskName": "Executa e acompanha modelo no SLURM",
+        "description": "Executa o modelo através da submissão de um job ao SLURM e acompanha a",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Executa o modelo através da submissão de um job ao SLURM e acompanha a execução",
+    },
+    "result-upload": {
+        "taskName": "Upload das saidas do modelo para o S3",
+        "description": "Upload das saidas do modelo para o S3",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Upload das saidas do modelo para o S3",
+    },
+    "remove-workdir": {
+        "taskName": "Remove diretorio temporario da execucao (NEWAVE/DECOMP)",
+        "description": "Remove diretorio temporario da execucao",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Remove diretorio temporario da execucao",
+    },
+    "cancel-run": {
+        "taskName": "Cancela job submetido na fila do SLURM",
+        "description": "Cancela um job que foi submetido à fila do SLURM para uma rodada",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Cancela um job que foi submetido à fila do SLURM para uma rodada",
+    },
+    "ingest-offline": {
+        "taskName": "Obtem dados de rodada para upload do S3",
+        "description": "Obtem dados de rodada para upload do S3",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Obtem dados de rodada para upload do S3",
+    },
+    "ensure-tools": {
+        "taskName": "Garante ferramentas versionadas",
+        "description": "Instala ou reutiliza instalacoes imutaveis de ferramentas, uma por commit",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Instala ou reutiliza instalacoes imutaveis de ferramentas, uma por commit",
+    },
+}
+
+
+@pytest.mark.parametrize("slug", [*SLUGS, ENSURE_SLUG])
+def test_task_documents_carry_the_switch_names(slug: str) -> None:
+    document = json.loads((TASKS / f"{slug}.json").read_text(encoding="utf-8"))
+
+    assert document == TASK_DOCUMENTS[slug]
 
 
 _REFERENCE_NAMES = re.compile(r"\{\{(.*?)\}\}")

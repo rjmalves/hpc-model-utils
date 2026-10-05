@@ -1,5 +1,5 @@
 {
-  "taskName": "Remove diretorio temporario da execucao (v2)",
+  "taskName": "Remove diretorio temporario da execucao (NEWAVE/DECOMP)",
   "description": "Remove diretorio temporario da execucao",
   "scriptType": "BASH",
   "tags": [],
