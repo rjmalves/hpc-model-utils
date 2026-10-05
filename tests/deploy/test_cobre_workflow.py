@@ -310,7 +310,7 @@ def check_cobre_run(root: Path) -> list[str]:
     if lines[-1] != RUN_EXEC:
         errors.append(f"{RUN_SCRIPT}: the final line is not the cobre command")
     text = "\n".join(lines)
-    if "--synthesis-bin" in text or "synthesis" in text.casefold():
+    if "synthesis" in text.casefold():
         errors.append(f"{RUN_SCRIPT}: the script references the synthesis tool")
     if "@@env:mpichPath@@" in text:
         errors.append(f"{RUN_SCRIPT}: references the NEWAVE/DECOMP mpichPath")

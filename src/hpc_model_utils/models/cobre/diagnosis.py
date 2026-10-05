@@ -200,7 +200,7 @@ def _read_outputs(ws: Workspace) -> RunOutputs:
     simulation: SimulationSummary | None = None
     training_missing = simulation_missing = False
     if phases.training:
-        path = output / "training" / "metadata.json"
+        path = output / _TRAINING_FILE
         training_missing = not path.exists()
         if not training_missing:
             try:
@@ -208,7 +208,7 @@ def _read_outputs(ws: Workspace) -> RunOutputs:
             except DataError as err:
                 problems.append((_TRAINING_FILE, str(err)))
     if phases.simulation:
-        path = output / "simulation" / "metadata.json"
+        path = output / _SIMULATION_FILE
         simulation_missing = not path.exists()
         if not simulation_missing:
             try:
