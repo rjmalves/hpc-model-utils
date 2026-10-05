@@ -106,6 +106,25 @@ def _write_cli_shim(dest_dir: Path) -> Path:
     return shim
 
 
+def _write_bridge_stub(dest_dir: Path) -> Path:
+    """A ``cobre-bridge`` stub: like ``build_dashboard``, it creates the
+    parent of the ``--output`` path and writes a minimal HTML file."""
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    stub = dest_dir / "cobre-bridge"
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "\n"
+        'target = Path(sys.argv[sys.argv.index("--output") + 1])\n'
+        "target.parent.mkdir(parents=True, exist_ok=True)\n"
+        'target.write_text("<html></html>\\n", encoding="utf-8")\n',
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    return stub
+
+
 class _ListChannel:
     def __init__(self) -> None:
         self.lines: list[str] = []
@@ -208,7 +227,10 @@ def _run_cobre(
         reporter,
         state_store,
         SubmitRequest(
-            resources=res, tools=tools, skip_model=False, synthesis_bin=None
+            resources=res,
+            tools=tools,
+            skip_model=False,
+            synthesis_bin=_write_bridge_stub(tmp_path / "bridge"),
         ),
         JobLedger(),
         settings=settings,

@@ -1,5 +1,5 @@
-"""ADR-038/ADR-040/R78/R116 tests for the cobre ``OutputPlan``
-(ticket-071)."""
+"""ADR-038/ADR-040/ADR-059/R78/R116 tests for the cobre ``OutputPlan``
+(ticket-071) and the dashboard arguments (ticket-080c)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from hpc_model_utils.core.errors import DataError
 from hpc_model_utils.core.outputs import RealizedOutputs, Tree, realize
 from hpc_model_utils.core.workspace import Workspace
 from hpc_model_utils.models.cobre import CobrePlugin, case
-from hpc_model_utils.models.cobre.outputs import output_plan
+from hpc_model_utils.models.cobre.outputs import dashboard_args, output_plan
 from tests.support.cobre_case import (
     case_members,
     cobre_workspace,
@@ -299,3 +299,50 @@ def test_disabled_training_writes_no_training_archive_or_raw_pair(
             "simulation/metadata.json",
         ),
     )
+
+
+# -- dashboard arguments ------------------------------------------------
+
+
+def test_dashboard_args_top_folder_with_simulation_output(
+    tmp_path: Path,
+) -> None:
+    ws = cobre_workspace(tmp_path).ws
+    write_outputs(case.case_root(ws))
+
+    assert dashboard_args(ws) == (
+        "dashboard",
+        "caso_cobre",
+        "--output",
+        "sintese/dashboard.html",
+    )
+
+
+def test_dashboard_args_flat_zip_uses_the_current_directory(
+    tmp_path: Path,
+) -> None:
+    ws = cobre_workspace(tmp_path, top=None).ws
+    write_outputs(case.case_root(ws))
+
+    assert dashboard_args(ws) == (
+        "dashboard",
+        ".",
+        "--output",
+        "sintese/dashboard.html",
+    )
+
+
+def test_dashboard_args_without_simulation_output_is_none(
+    tmp_path: Path,
+) -> None:
+    ws = cobre_workspace(tmp_path).ws
+    write_outputs(case.case_root(ws), simulation=None)
+
+    assert dashboard_args(ws) is None
+
+
+def test_dashboard_args_missing_eco_deck_raises_data_error(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(DataError, match=r"eco_deck\.zip missing"):
+        dashboard_args(Workspace.at(tmp_path))
