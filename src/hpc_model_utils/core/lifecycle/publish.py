@@ -221,6 +221,10 @@ def publish(
                 rel = f"saidas/logs/{job.phase.value}-{job.job_id}.out"
                 _upload(log_path, prefix.join(rel), rel)
 
+        if ws.synthesis_log_path.is_file():
+            rel = "saidas/logs/synthesis.out"
+            _upload(ws.synthesis_log_path, prefix.join(rel), rel)
+
         sintese_dir = ws.root / "sintese"
         if sintese_dir.is_dir():
             for entry in sorted(sintese_dir.iterdir()):

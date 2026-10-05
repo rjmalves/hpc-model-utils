@@ -21,13 +21,14 @@ it.
 from __future__ import annotations
 
 import dataclasses
+import logging
 import os
 import re
 import socket
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, Self, TextIO
 
 from hpc_model_utils.core.diagnosis import (
     Diagnosis,
@@ -53,9 +54,15 @@ from hpc_model_utils.infra.errors import ShellCommandError, UnsafeArchiveError
 from hpc_model_utils.infra.shell import run as shell_run
 from hpc_model_utils.infra.slurm import JobOutcome
 
+logger = logging.getLogger(__name__)
+
 _LSCPU_TIMEOUT = 10.0
 _LSCPU_PAIR_RE = re.compile(r"(\d+),(\d+)")
 _PROCESS_EXIT_RE = re.compile(r"-?[0-9]+")
+_SYNTHESIS_LEVEL_LINE = re.compile(
+    r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} "
+    r"(?:WARNING|ERROR|CRITICAL): .*"
+)
 
 
 class SlurmLike(Protocol):
@@ -233,6 +240,80 @@ def _resolve_synthesis_bin(
     return (legacy if legacy.exists() else None), tried
 
 
+class _SynthesisLog:
+    """Writes sintetizador's complete merged output to ``path`` (published
+    as ``saidas/logs/synthesis.out``) and passes only its WARNING-or-above
+    lines to ``emit``. While the file is unavailable (it could not be
+    opened, or a write failed) every line goes to ``emit`` instead, so the
+    log file never changes the synthesis outcome."""
+
+    def __init__(self, path: Path, emit: Callable[[str], None]) -> None:
+        self.lines = 0
+        self.flagged = 0
+        self._path = path
+        self._emit = emit
+        self._file: TextIO | None = None
+        self._broken = False
+
+    def __enter__(self) -> Self:
+        try:
+            # line-buffered, so a failed write surfaces in ``on_line``
+            self._file = self._path.open(
+                "w", encoding="utf-8", errors="replace", buffering=1
+            )
+        except OSError as exc:
+            logger.warning(
+                "synthesis log unavailable (%s); relaying sintetizador output",
+                exc,
+            )
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        if self._file is None:
+            return
+        try:
+            self._file.close()
+        except OSError as exc:
+            if not self._broken:
+                logger.warning("synthesis log close failed (%s)", exc)
+
+    def on_line(self, line: str) -> None:
+        if self._file is not None and not self._broken:
+            try:
+                self._file.write(f"{line}\n")
+            except OSError as exc:
+                self._broken = True
+                logger.warning(
+                    "synthesis log write failed (%s); relaying the remaining "
+                    "sintetizador output",
+                    exc,
+                )
+            else:
+                self.lines += 1
+                if _SYNTHESIS_LEVEL_LINE.fullmatch(line) is None:
+                    return
+                self.flagged += 1
+        self._emit(line)
+
+    def summarize(self, returncode: int) -> None:
+        # no file, no summary: the lines were relayed as received
+        if self._file is not None:
+            logger.info(
+                "sintetizador exited %d: %d lines in "
+                "saidas/logs/synthesis.out, %d at WARNING or above",
+                returncode,
+                self.lines,
+                self.flagged,
+            )
+
+
+def _discard_stale_synthesis_log(ws: Workspace) -> None:
+    try:
+        ws.synthesis_log_path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("stale synthesis log not removed (%s)", exc)
+
+
 def _run_synthesis(
     ws: Workspace,
     plugin: ModelPlugin,
@@ -254,9 +335,14 @@ def _run_synthesis(
         )
     start = time.monotonic()
     try:
-        result = shell_run(
-            [str(resolved), *args], cwd=ws.root, on_line=emit, timeout=None
-        )
+        with _SynthesisLog(ws.synthesis_log_path, emit) as synthesis_log:
+            result = shell_run(
+                [str(resolved), *args],
+                cwd=ws.root,
+                on_line=synthesis_log.on_line,
+                timeout=None,
+                keep_output=False,
+            )
     except ShellCommandError as exc:
         # an exec failure (e.g. a non-executable binary) counts as the
         # synthesis step failing under R137, not a fatal path
@@ -268,6 +354,7 @@ def _run_synthesis(
             StepOutcome("synthesis", False, detail, duration),
         )
     duration = time.monotonic() - start
+    synthesis_log.summarize(result.returncode)
     if result.returncode != 0:
         detail = f"sintetizador exited {result.returncode}"
         return (
@@ -336,6 +423,8 @@ def finalize(
     state = StateStore(ws).load()
     if state is None:
         raise StateFormatError("finalize requires .hpcmu/state.json")
+
+    _discard_stale_synthesis_log(ws)
 
     log_paths: tuple[Path, ...]
     outcome: JobOutcome | None

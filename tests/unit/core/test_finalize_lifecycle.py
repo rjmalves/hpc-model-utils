@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import dataclasses
+import errno
+import logging
 import os
+import shlex
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -43,6 +47,14 @@ from hpc_model_utils.infra.slurm import JobOutcome
 from tests.support.fake_plugin import FakePlugin
 
 _SETTINGS = EngineSettings()
+_FINALIZE_LOGGER = "hpc_model_utils.core.lifecycle.finalize"
+_SYNTHESIS_OUTPUT = (
+    "2026-10-04 20:21:31,000 INFO: a",
+    "2026-10-04 20:21:32,000 ERROR: b",
+    "Traceback (most recent call last):",
+    '  File "x", line 1',
+    "2026-10-04 20:21:33,000 WARNING: c",
+)
 
 
 def _noop(line: str) -> None:
@@ -103,6 +115,11 @@ class _RaisingSynthesisArgsPlugin(FakePlugin):
         raise RuntimeError("args-boom")
 
 
+class _NoSynthesisArgsPlugin(FakePlugin):
+    def synthesis_args(self, cpus: int) -> tuple[str, ...] | None:
+        return None
+
+
 class _CapturingPlugin(FakePlugin):
     captured_process_exit: int | None = None
 
@@ -137,7 +154,11 @@ def _prepare_workspace(tmp_path: Path, *, token: str = "SUCCESS") -> Workspace:
 
 
 def _install_legacy_sintetizador(
-    ws: Workspace, plugin_name: str, *, exit_code: int = 0
+    ws: Workspace,
+    plugin_name: str,
+    *,
+    exit_code: int = 0,
+    output: Sequence[str] = (),
 ) -> Path:
     bin_path = (
         ws.root
@@ -147,9 +168,12 @@ def _install_legacy_sintetizador(
         / f"sintetizador-{plugin_name}"
     )
     bin_path.parent.mkdir(parents=True, exist_ok=True)
+    printed = "".join(
+        f"printf '%s\\n' {shlex.quote(text)}\n" for text in output
+    )
     script = (
         "#!/bin/bash\nset -u\nmkdir -p sintese\n: > sintese/x.parquet\n"
-        f"exit {exit_code}\n"
+        f"{printed}exit {exit_code}\n"
     )
     bin_path.write_text(script, encoding="utf-8")
     bin_path.chmod(0o755)
@@ -191,6 +215,64 @@ def _raising_shell_run(
     keep_output: bool = True,
 ) -> ShellResult:
     raise ShellCommandError("lscpu: command not found")
+
+
+class _FlakyLogFile:
+    def __init__(
+        self, *, fail_write_after: int | None = None, fail_close: bool = False
+    ) -> None:
+        self.written: list[str] = []
+        self._fail_write_after = fail_write_after
+        self._fail_close = fail_close
+
+    def write(self, text: str) -> int:
+        if (
+            self._fail_write_after is not None
+            and len(self.written) >= self._fail_write_after
+        ):
+            raise OSError(errno.ENOSPC, "No space left on device")
+        self.written.append(text)
+        return len(text)
+
+    def close(self) -> None:
+        if self._fail_close:
+            raise OSError(errno.EIO, "Input/output error")
+
+
+def _swap_synthesis_log_file(
+    monkeypatch: pytest.MonkeyPatch, ws: Workspace, flaky: _FlakyLogFile
+) -> None:
+    real_open = Path.open
+
+    def _open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self == ws.synthesis_log_path:
+            return flaky
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", _open)
+
+
+def _run_finalize(ws: Workspace, emit: Callable[[str], None]) -> FinalizeRecord:
+    return finalize(
+        ws,
+        FakePlugin(),
+        StubSlurm(_job_outcome()),
+        model_job_id="111",
+        cores=2,
+        synthesis_bin=None,
+        settings=_SETTINGS,
+        emit=emit,
+    )
+
+
+def _finalize_messages(
+    caplog: pytest.LogCaptureFixture, level: int
+) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == _FINALIZE_LOGGER and record.levelno == level
+    ]
 
 
 # -- finalize() --------------------------------------------------------
@@ -558,6 +640,214 @@ def test_finalize_synthesis_bin_not_executable_records_failure_not_fatal(
     assert record.synthesis is not None
     assert record.synthesis.ok is False
     assert record.diagnosis.reason.startswith("synthesis failed: ")
+
+
+def test_finalize_synthesis_output_goes_to_log_and_only_warnings_are_emitted(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    _install_legacy_sintetizador(ws, "fake", output=_SYNTHESIS_OUTPUT)
+    emitted: list[str] = []
+
+    with caplog.at_level(logging.INFO, logger=_FINALIZE_LOGGER):
+        record = _run_finalize(ws, emitted.append)
+
+    log_text = ws.synthesis_log_path.read_text(encoding="utf-8")
+    assert log_text.splitlines() == list(_SYNTHESIS_OUTPUT)
+    assert emitted == [_SYNTHESIS_OUTPUT[1], _SYNTHESIS_OUTPUT[4]]
+    assert _finalize_messages(caplog, logging.INFO) == [
+        "sintetizador exited 0: 5 lines in saidas/logs/synthesis.out, "
+        "2 at WARNING or above"
+    ]
+    assert record.synthesis is not None
+    assert record.synthesis.ok is True
+
+
+def test_finalize_synthesis_nonzero_exit_logs_output_and_summarizes_exit_code(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    _install_legacy_sintetizador(
+        ws, "fake", exit_code=3, output=_SYNTHESIS_OUTPUT[:2]
+    )
+
+    with caplog.at_level(logging.INFO, logger=_FINALIZE_LOGGER):
+        record = _run_finalize(ws, _noop)
+
+    assert ws.synthesis_log_path.read_text(
+        encoding="utf-8"
+    ).splitlines() == list(_SYNTHESIS_OUTPUT[:2])
+    assert _finalize_messages(caplog, logging.INFO) == [
+        "sintetizador exited 3: 2 lines in saidas/logs/synthesis.out, "
+        "1 at WARNING or above"
+    ]
+    assert record.diagnosis.status is RunStatus.SUCCESS
+    assert record.synthesis is not None
+    assert record.synthesis.ok is False
+
+
+def test_finalize_synthesis_log_overwrites_previous_attempt(
+    tmp_path: Path,
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    _install_legacy_sintetizador(ws, "fake", output=_SYNTHESIS_OUTPUT[:1])
+    ws.synthesis_log_path.write_text("stale\nstale\n", encoding="utf-8")
+
+    _run_finalize(ws, _noop)
+
+    assert ws.synthesis_log_path.read_text(encoding="utf-8").splitlines() == [
+        _SYNTHESIS_OUTPUT[0]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("plugin", "job_state"),
+    [
+        pytest.param(FakePlugin(), "COMPLETED", id="binary-missing"),
+        pytest.param(
+            _RaisingSynthesisArgsPlugin(), "COMPLETED", id="args-failure"
+        ),
+        pytest.param(_NoSynthesisArgsPlugin(), "COMPLETED", id="args-none"),
+        pytest.param(FakePlugin(), "TIMEOUT", id="model-not-successful"),
+    ],
+)
+def test_finalize_without_running_synthesis_discards_stale_synthesis_log(
+    tmp_path: Path, plugin: FakePlugin, job_state: str
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    ws.synthesis_log_path.write_text("stale\n", encoding="utf-8")
+
+    finalize(
+        ws,
+        plugin,
+        StubSlurm(_job_outcome(state=job_state)),
+        model_job_id="111",
+        cores=2,
+        synthesis_bin=None,
+        settings=_SETTINGS,
+        emit=_noop,
+    )
+
+    assert not ws.synthesis_log_path.exists()
+
+
+def test_finalize_stale_synthesis_log_unremovable_warns_and_keeps_outcome(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    ws.synthesis_log_path.write_text("stale\n", encoding="utf-8")
+
+    real_unlink = Path.unlink
+
+    def _unlink(self: Path, missing_ok: bool = False) -> None:
+        if self == ws.synthesis_log_path:
+            raise PermissionError(errno.EACCES, "Permission denied")
+        real_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", _unlink)
+
+    with caplog.at_level(logging.WARNING, logger=_FINALIZE_LOGGER):
+        record = _run_finalize(ws, _noop)
+
+    warnings = _finalize_messages(caplog, logging.WARNING)
+    assert len(warnings) == 1
+    assert warnings[0].startswith("stale synthesis log not removed")
+    assert record.diagnosis.rule_id == "core.synthesis_missing"
+
+
+def test_finalize_synthesis_log_unopenable_relays_every_line(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    _install_legacy_sintetizador(ws, "fake", output=_SYNTHESIS_OUTPUT)
+    ws.synthesis_log_path.mkdir()
+    emitted: list[str] = []
+
+    with caplog.at_level(logging.INFO, logger=_FINALIZE_LOGGER):
+        record = _run_finalize(ws, emitted.append)
+
+    assert emitted == list(_SYNTHESIS_OUTPUT)
+    warnings = [
+        message
+        for message in _finalize_messages(caplog, logging.WARNING)
+        if message.startswith("synthesis log unavailable")
+    ]
+    assert len(warnings) == 1
+    assert _finalize_messages(caplog, logging.INFO) == []
+    assert record.synthesis is not None
+    assert record.synthesis.ok is True
+
+
+def test_finalize_synthesis_log_write_failure_relays_the_remaining_lines(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    _install_legacy_sintetizador(ws, "fake", output=_SYNTHESIS_OUTPUT)
+    flaky = _FlakyLogFile(fail_write_after=2)
+    _swap_synthesis_log_file(monkeypatch, ws, flaky)
+    emitted: list[str] = []
+
+    with caplog.at_level(logging.INFO, logger=_FINALIZE_LOGGER):
+        record = _run_finalize(ws, emitted.append)
+
+    assert flaky.written == [f"{line}\n" for line in _SYNTHESIS_OUTPUT[:2]]
+    assert emitted == list(_SYNTHESIS_OUTPUT[1:])
+    warnings = _finalize_messages(caplog, logging.WARNING)
+    assert len(warnings) == 1
+    assert warnings[0].startswith("synthesis log write failed")
+    assert _finalize_messages(caplog, logging.INFO) == [
+        "sintetizador exited 0: 2 lines in saidas/logs/synthesis.out, "
+        "1 at WARNING or above"
+    ]
+    assert record.synthesis is not None
+    assert record.synthesis.ok is True
+
+
+def test_finalize_synthesis_log_close_failure_keeps_synthesis_ok(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    _install_legacy_sintetizador(ws, "fake", output=_SYNTHESIS_OUTPUT)
+    _swap_synthesis_log_file(monkeypatch, ws, _FlakyLogFile(fail_close=True))
+
+    with caplog.at_level(logging.WARNING, logger=_FINALIZE_LOGGER):
+        record = _run_finalize(ws, _noop)
+
+    warnings = _finalize_messages(caplog, logging.WARNING)
+    assert len(warnings) == 1
+    assert warnings[0].startswith("synthesis log close failed")
+    assert record.synthesis is not None
+    assert record.synthesis.ok is True
+
+
+def test_finalize_synthesis_exec_failure_logs_no_summary(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    bad_bin = ws.root / "sintetizador-fake-bad"
+    bad_bin.write_text("not a script\n", encoding="utf-8")
+
+    with caplog.at_level(logging.INFO, logger=_FINALIZE_LOGGER):
+        record = finalize(
+            ws,
+            FakePlugin(),
+            StubSlurm(_job_outcome()),
+            model_job_id="111",
+            cores=2,
+            synthesis_bin=bad_bin,
+            settings=_SETTINGS,
+            emit=_noop,
+        )
+
+    assert _finalize_messages(caplog, logging.INFO) == []
+    assert record.synthesis is not None
+    assert record.synthesis.ok is False
 
 
 def test_finalize_model_job_id_none_never_calls_slurm_outcome(
