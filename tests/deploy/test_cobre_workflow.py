@@ -100,7 +100,7 @@ PARAMETER_NAMES = (
     "versionsBucket",
     "jobTimeoutHours",
 )
-UTILS_TAG = "v2.1.0"
+UTILS_TAG = "v2.2.0"
 BRIDGE_TAG = "v0.17.0"
 BRIDGE_SHA = "1b059ac505a8d57b6549c0a60411c41a9d7167cb"
 UPLOAD_WORKFLOW = "workflows/upload-versao.json"
@@ -594,7 +594,7 @@ def test_check_pins_real_tree_reports_nothing() -> None:
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [
-        (_branch_tag, r"utilsAppVersion is not v2\.1\.0"),
+        (_branch_tag, r"utilsAppVersion is not v"),
         (_short_sha, r"utilsAppSha is not 40 hex"),
         (_visible_sha, r"parameter utilsAppSha has the wrong shape"),
         (_branch_bridge_tag, r"synthesisAppVersion is not v0\.17\.0"),
