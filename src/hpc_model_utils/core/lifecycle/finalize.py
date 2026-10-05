@@ -2,16 +2,17 @@
 ``finalize`` job-side step.
 
 ``finalize`` diagnoses the model job, runs postprocess and the
-sintetizador on ``SUCCESS`` only, always realizes outputs, and writes
+synthesis tool (sintetizador for NEWAVE and DECOMP, cobre-bridge for
+cobre) on ``SUCCESS`` only, always realizes outputs, and writes
 ``.hpcmu/finalize.json`` once via ``write_atomic`` -- never
 ``state.json``, which the login side owns (ticket-038 ingests this
 record).
 
-A sintetizador that exits non-zero, or a postprocess step that
+A synthesis tool that exits non-zero, or a postprocess step that
 raises, keeps ``SUCCESS`` but records the failure loudly (R137 /
 ADR-053): the diagnosis reason is prefixed, the first evidence item
 names the failing step, and ``synthesis_status`` reports ``"failed"``.
-Only a *missing* sintetizador binary changes the status, to
+Only a *missing* synthesis tool binary changes the status, to
 ``RUNTIME_ERROR`` / ``core.synthesis_missing`` (R101) -- and only when
 no ``--synthesis-bin`` was given does the legacy workspace path
 apply; an explicit, missing ``--synthesis-bin`` never falls back to
@@ -241,11 +242,11 @@ def _resolve_synthesis_bin(
 
 
 class _SynthesisLog:
-    """Writes sintetizador's complete merged output to ``path`` (published
-    as ``saidas/logs/synthesis.out``) and passes only its WARNING-or-above
-    lines to ``emit``. While the file is unavailable (it could not be
-    opened, or a write failed) every line goes to ``emit`` instead, so the
-    log file never changes the synthesis outcome."""
+    """Writes the synthesis tool's complete merged output to ``path``
+    (published as ``saidas/logs/synthesis.out``) and passes only its
+    WARNING-or-above lines to ``emit``. While the file is unavailable (it
+    could not be opened, or a write failed) every line goes to ``emit``
+    instead, so the log file never changes the synthesis outcome."""
 
     def __init__(self, path: Path, emit: Callable[[str], None]) -> None:
         self.lines = 0
@@ -263,7 +264,8 @@ class _SynthesisLog:
             )
         except OSError as exc:
             logger.warning(
-                "synthesis log unavailable (%s); relaying sintetizador output",
+                "synthesis log unavailable (%s); "
+                "relaying synthesis tool output",
                 exc,
             )
         return self
@@ -285,7 +287,7 @@ class _SynthesisLog:
                 self._broken = True
                 logger.warning(
                     "synthesis log write failed (%s); relaying the remaining "
-                    "sintetizador output",
+                    "synthesis tool output",
                     exc,
                 )
             else:
@@ -299,7 +301,7 @@ class _SynthesisLog:
         # no file, no summary: the lines were relayed as received
         if self._file is not None:
             logger.info(
-                "sintetizador exited %d: %d lines in "
+                "synthesis tool exited %d: %d lines in "
                 "saidas/logs/synthesis.out, %d at WARNING or above",
                 returncode,
                 self.lines,
@@ -325,11 +327,15 @@ def _run_synthesis(
     resolved, tried = _resolve_synthesis_bin(ws, plugin, synthesis_bin)
     if resolved is None:
         tried_text = ", ".join(str(path) for path in tried)
+        hint = "; pass --synthesis-bin" if synthesis_bin is None else ""
         return (
             _override_diagnosis(
                 diag,
                 rule_id="core.synthesis_missing",
-                reason=(f"sintetizador binary not found; tried: {tried_text}"),
+                reason=(
+                    f"synthesis tool binary not found; tried: {tried_text}"
+                    f"{hint}"
+                ),
             ),
             None,
         )
@@ -356,7 +362,7 @@ def _run_synthesis(
     duration = time.monotonic() - start
     synthesis_log.summarize(result.returncode)
     if result.returncode != 0:
-        detail = f"sintetizador exited {result.returncode}"
+        detail = f"synthesis tool exited {result.returncode}"
         return (
             _record_step_failure(diag, "synthesis", detail),
             StepOutcome("synthesis", False, detail, duration),

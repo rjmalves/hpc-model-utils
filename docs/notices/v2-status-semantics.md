@@ -102,7 +102,12 @@ Before the switch date, check each point against encadeador's code:
    `INFRA_ERROR:`, `LICENSE_ERROR:` or `CANCELLED:` annotation. In v1 they
    depended on whatever the partial outputs looked like.
 4. **Annotation text.** If encadeador reads or displays the run's annotation,
-   expect the `<STATUS>: <reason> [<rule_id>]` form.
+   expect the `<STATUS>: <reason> [<rule_id>]` form. From 2.2.0 the reason of
+   a failed or missing synthesis step names the tool neutrally
+   (`synthesis failed: synthesis tool exited <n>`,
+   `synthesis tool binary not found; tried: …`) for NEWAVE, DECOMP and
+   cobre; match on the `synthesis failed:` prefix, the rule id or
+   `synthesis_status`, never on the tool name.
 5. **Artifacts.** If encadeador reads any file from a run's artifacts other
    than `saidas/metadata.modelops`, check it against "Artifact changes" above.
 6. **Not yet exercised on prd.** The INFEASIBLE → flexibilization → next-run

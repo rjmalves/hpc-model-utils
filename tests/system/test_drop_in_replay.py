@@ -509,4 +509,4 @@ def test_missing_sintetizador_is_loud_not_fatal(
     assert status_hooks == [Hook("SetRuntimeError", ())]
     annotation = _annotation(hooks)
     assert "core.synthesis_missing" in annotation
-    assert "sintetizador binary not found" in annotation
+    assert "synthesis tool binary not found" in annotation

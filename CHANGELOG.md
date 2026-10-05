@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Behavior changes
 
 - A chained DECOMP run whose dadger `FC NEWCUT` names a `cortes-NNN.dat` other than the stage its horizon end needs now fails in `preprocess` with `DATA_ERROR` (`SetDataError`) before any job is submitted; 2.0.0 to 2.1.0 only appended the mismatch to the annotation. See [`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md).
+- The synthesis step's failure messages name the tool neutrally for every model: a failed step reads `synthesis failed: synthesis tool exited <n>` instead of `synthesis failed: sintetizador exited <n>`, and a missing binary reads `synthesis tool binary not found; tried: …`, with `; pass --synthesis-bin` when the option was not given; the `synthesis failed:` prefix, the statuses, the rule ids and `synthesis_status` are unchanged.
 
 ### Changed
 

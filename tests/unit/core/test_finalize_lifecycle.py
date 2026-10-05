@@ -344,6 +344,7 @@ def test_finalize_no_synthesis_bin_and_no_legacy_sets_synthesis_missing(
     assert record.diagnosis.rule_id == "core.synthesis_missing"
     legacy = legacy_synthesis_bin(ws, FakePlugin())
     assert str(legacy) in record.diagnosis.reason
+    assert record.diagnosis.reason.endswith("; pass --synthesis-bin")
     assert "core.fake" in record.diagnosis.matched
 
 
@@ -371,10 +372,10 @@ def test_finalize_synthesis_nonzero_exit_keeps_success_with_evidence_first(
     assert record.synthesis is not None
     assert record.synthesis.ok is False
     assert record.diagnosis.reason.startswith(
-        "synthesis failed: sintetizador exited 3; "
+        "synthesis failed: synthesis tool exited 3; "
     )
     assert record.diagnosis.evidence[0] == EvidenceItem(
-        "plugin", "synthesis", "sintetizador exited 3"
+        "plugin", "synthesis", "synthesis tool exited 3"
     )
     assert len(record.diagnosis.evidence) == 20
     assert synthesis_status(record) == "failed"
@@ -521,10 +522,10 @@ def test_finalize_both_steps_failing_orders_synthesis_prefix_first(
     assert record.synthesis is not None
     assert record.synthesis.ok is False
     assert record.diagnosis.reason.startswith(
-        "synthesis failed: sintetizador exited 5; postprocess failed: boom; "
+        "synthesis failed: synthesis tool exited 5; postprocess failed: boom; "
     )
     assert record.diagnosis.evidence[0] == EvidenceItem(
-        "plugin", "synthesis", "sintetizador exited 5"
+        "plugin", "synthesis", "synthesis tool exited 5"
     )
     assert record.diagnosis.evidence[1] == EvidenceItem(
         "plugin", "postprocess", "boom"
@@ -654,6 +655,7 @@ def test_finalize_explicit_synthesis_bin_missing_ignores_existing_legacy(
     assert str(missing_bin) in record.diagnosis.reason
     legacy = legacy_synthesis_bin(ws, FakePlugin())
     assert str(legacy) not in record.diagnosis.reason
+    assert "pass --synthesis-bin" not in record.diagnosis.reason
 
 
 def test_finalize_synthesis_bin_not_executable_records_failure_not_fatal(
@@ -695,7 +697,7 @@ def test_finalize_synthesis_output_goes_to_log_and_only_warnings_are_emitted(
     assert log_text.splitlines() == list(_SYNTHESIS_OUTPUT)
     assert emitted == [_SYNTHESIS_OUTPUT[1], _SYNTHESIS_OUTPUT[4]]
     assert _finalize_messages(caplog, logging.INFO) == [
-        "sintetizador exited 0: 5 lines in saidas/logs/synthesis.out, "
+        "synthesis tool exited 0: 5 lines in saidas/logs/synthesis.out, "
         "2 at WARNING or above"
     ]
     assert record.synthesis is not None
@@ -717,7 +719,7 @@ def test_finalize_synthesis_nonzero_exit_logs_output_and_summarizes_exit_code(
         encoding="utf-8"
     ).splitlines() == list(_SYNTHESIS_OUTPUT[:2])
     assert _finalize_messages(caplog, logging.INFO) == [
-        "sintetizador exited 3: 2 lines in saidas/logs/synthesis.out, "
+        "synthesis tool exited 3: 2 lines in saidas/logs/synthesis.out, "
         "1 at WARNING or above"
     ]
     assert record.diagnosis.status is RunStatus.SUCCESS
@@ -839,7 +841,7 @@ def test_finalize_synthesis_log_write_failure_relays_the_remaining_lines(
     assert len(warnings) == 1
     assert warnings[0].startswith("synthesis log write failed")
     assert _finalize_messages(caplog, logging.INFO) == [
-        "sintetizador exited 0: 2 lines in saidas/logs/synthesis.out, "
+        "synthesis tool exited 0: 2 lines in saidas/logs/synthesis.out, "
         "1 at WARNING or above"
     ]
     assert record.synthesis is not None
@@ -954,7 +956,9 @@ def test_finalize_record_round_trip_via_write_and_load_finalize(
         run_id="run-1",
         diagnosis=diag,
         postprocess=StepOutcome("postprocess", True, "", 1.5),
-        synthesis=StepOutcome("synthesis", False, "sintetizador exited 3", 2.5),
+        synthesis=StepOutcome(
+            "synthesis", False, "synthesis tool exited 3", 2.5
+        ),
         outputs=RealizedOutputs(
             deck=".hpcmu/outputs/deck_processado.zip",
             archives=(".hpcmu/outputs/fake.zip",),
