@@ -67,6 +67,14 @@ _PIN_REPOS: Mapping[str, str] = MappingProxyType(
         "sintetizador-decomp": (
             "https://github.com/rjmalves/sintetizador-decomp.git"
         ),
+        "cobre-bridge": "https://github.com/cobre-rs/cobre-bridge.git",
+    }
+)
+_SYNTHESIS_TOOLS: Mapping[str, str] = MappingProxyType(
+    {
+        "newave": "sintetizador-newave",
+        "decomp": "sintetizador-decomp",
+        "cobre": "cobre-bridge",
     }
 )
 _PINS = (
@@ -396,16 +404,18 @@ def _pin_lines(
             )
             failures += 1
             continue
+        model = params.get("modelName", "")
+        name: str | None
         if tag_param == "utilsAppVersion":
             name = "hpc-model-utils"
         else:
-            name = f"sintetizador-{params.get('modelName', '')}"
-        repo = repos.get(name)
-        status = (
-            f"MISSING (no repository for {name})"
-            if repo is None
-            else _verify_pin(repo, tag, sha)
-        )
+            name = _SYNTHESIS_TOOLS.get(model)
+        if name is None:
+            status = f"MISSING (no synthesis tool for model {model!r})"
+        elif name not in repos:
+            status = f"MISSING (no repository for {name})"
+        else:
+            status = _verify_pin(repos[name], tag, sha)
         lines.append(f"PIN {tag} {sha[:12]} {status}")
         failures += status != "ok"
     return lines, failures

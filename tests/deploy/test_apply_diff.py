@@ -24,7 +24,14 @@ import pytest
 from click.testing import CliRunner
 
 from deploy.modelops import apply as apply_module
-from deploy.modelops.apply import _PIN_REPOS, _scrub, _sync, _verify_pin, cli
+from deploy.modelops.apply import (
+    _PIN_REPOS,
+    _SYNTHESIS_TOOLS,
+    _scrub,
+    _sync,
+    _verify_pin,
+    cli,
+)
 from deploy.modelops.modelops_api import ModelOpsClient
 from deploy.modelops.render import (
     EnvFile,
@@ -855,11 +862,43 @@ def test_pin_repository_without_a_mapping_entry_prints_missing(
     assert code == 1
 
 
+@pytest.mark.parametrize(
+    ("model", "tool"),
+    [("decomp", "sintetizador-decomp"), ("cobre", "cobre-bridge")],
+)
 def test_pin_synthesis_repository_follows_the_model_name_default(
     fake: FakeModelOpsServer,
     defs: Defs,
     remote: Remote,
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    model: str,
+    tool: str,
+) -> None:
+    defs.set_params(
+        utilsAppVersion=ANNOTATED_TAG,
+        utilsAppSha=remote.commit,
+        synthesisAppVersion=ANNOTATED_TAG,
+        synthesisAppSha=remote.commit,
+        modelName=model,
+    )
+    _seed(fake, defs)
+    unused = str(tmp_path / "must-not-be-used.git")
+    repos = {name: unused for name in _SYNTHESIS_TOOLS.values()}
+    repos["hpc-model-utils"] = remote.url
+    repos[tool] = remote.url
+
+    code, lines, _ = _run(fake, defs, capsys, repos=repos)
+
+    pins = [x for x in lines if x.startswith("PIN ")]
+    assert pins == [f"PIN {ANNOTATED_TAG} {remote.commit[:12]} ok"] * 2
+    assert code == 0
+
+
+def test_pin_synthesis_model_without_a_tool_prints_missing(
+    fake: FakeModelOpsServer,
+    defs: Defs,
+    remote: Remote,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     defs.set_params(
@@ -867,20 +906,20 @@ def test_pin_synthesis_repository_follows_the_model_name_default(
         utilsAppSha=remote.commit,
         synthesisAppVersion=ANNOTATED_TAG,
         synthesisAppSha=remote.commit,
-        modelName="decomp",
+        modelName="dessem",
     )
     _seed(fake, defs)
-    repos = {
-        "hpc-model-utils": remote.url,
-        "sintetizador-decomp": remote.url,
-        "sintetizador-newave": str(tmp_path / "must-not-be-used.git"),
-    }
+    repos = {"hpc-model-utils": remote.url, "sintetizador-dessem": remote.url}
 
     code, lines, _ = _run(fake, defs, capsys, repos=repos)
 
-    pins = [x for x in lines if x.startswith("PIN ")]
-    assert pins == [f"PIN {ANNOTATED_TAG} {remote.commit[:12]} ok"] * 2
-    assert code == 0
+    assert (
+        f"PIN {ANNOTATED_TAG} {remote.commit[:12]} MISSING"
+        " (no synthesis tool for model 'dessem')"
+    ) in lines
+    assert f"PIN {ANNOTATED_TAG} {remote.commit[:12]} ok" in lines
+    assert lines[-1].endswith("1 failures")
+    assert code == 1
 
 
 def test_pin_v1_workflow_prints_the_no_sha_skip_once(
@@ -977,11 +1016,20 @@ def test_pin_verify_git_failure_is_missing_not_skipped(
     assert status.startswith("MISSING (")
 
 
-def test_pin_production_repositories_are_the_two_github_projects() -> None:
+def test_pin_production_repositories_are_the_four_github_projects() -> None:
     assert dict(_PIN_REPOS) == {
         "hpc-model-utils": "https://github.com/rjmalves/hpc-model-utils.git",
         "sintetizador-newave": "https://github.com/rjmalves/sintetizador-newave.git",
         "sintetizador-decomp": "https://github.com/rjmalves/sintetizador-decomp.git",
+        "cobre-bridge": "https://github.com/cobre-rs/cobre-bridge.git",
+    }
+
+
+def test_pin_synthesis_tools_map_each_model() -> None:
+    assert dict(_SYNTHESIS_TOOLS) == {
+        "newave": "sintetizador-newave",
+        "decomp": "sintetizador-decomp",
+        "cobre": "cobre-bridge",
     }
 
 
