@@ -169,6 +169,7 @@ RUN_EXEC = (
     ' "$CORES" --max-cores-per-node "$MAX_CORES"'
     ' --max-job-time-hours "$JOB_HOURS" --mpich-path "$MPICH_PATH"'
     ' --slurm-path "$SLURM_PATH"'
+    ' --synthesis-bin "$SYNTHESIS_DIR/.venv/bin/cobre-bridge"'
 )
 ENSURE_EXEC = (
     "exec bash -s -- --root '@@env:toolsRoot@@' --uv '@@env:uvBin@@'"
@@ -331,8 +332,8 @@ def check_cobre_run(root: Path) -> list[str]:
     if lines[-1] != RUN_EXEC:
         errors.append(f"{RUN_SCRIPT}: the final line is not the cobre command")
     text = "\n".join(lines)
-    if "synthesis" in text.casefold():
-        errors.append(f"{RUN_SCRIPT}: the script references the synthesis tool")
+    if "sintetizador" in text:
+        errors.append(f"{RUN_SCRIPT}: the script references a sintetizador")
     if "@@env:mpichPath@@" in text:
         errors.append(f"{RUN_SCRIPT}: references the NEWAVE/DECOMP mpichPath")
     if "2>" in text:
@@ -624,9 +625,14 @@ def _edit_script(root: Path, rel: str, old: str, new: str) -> None:
     ("old", "new", "message"),
     [
         (
-            '--slurm-path "$SLURM_PATH"',
-            '--slurm-path "$SLURM_PATH" --synthesis-bin "$UTILS_DIR/x"',
+            '/.venv/bin/cobre-bridge"',
+            '/.venv/bin/sintetizador-cobre"',
             r"the final line is not the cobre command",
+        ),
+        (
+            'cd -- "$WORKDIR"',
+            '# sintetizador\ncd -- "$WORKDIR"',
+            r"references a sintetizador",
         ),
         (
             "@@env:cobreMpichPath@@",
@@ -733,6 +739,7 @@ def _cobre_values(sandbox: Layout) -> dict[str, str]:
         "mpichPath": sandbox.env["cobreMpichPath"],
         "slurmPath": sandbox.env["slurmPath"],
         "utilsToolDir": str(sandbox.tool_dir("hpc-model-utils")),
+        "synthesisToolDir": str(sandbox.tool_dir("cobre-bridge")),
     }
 
 
@@ -795,6 +802,8 @@ def test_cobre_run_valid_values_exec_the_stub_once(layout: Layout) -> None:
                 layout.env["cobreMpichPath"],
                 "--slurm-path",
                 layout.env["slurmPath"],
+                "--synthesis-bin",
+                f"{layout.tool_dir('cobre-bridge')}/.venv/bin/cobre-bridge",
             ],
         )
     ]
@@ -815,6 +824,26 @@ def test_cobre_run_invalid_value_is_rejected(
     result = _run_cobre_run(layout, {parameter: value})
 
     _assert_cobre_run_rejected(layout, result, parameter)
+
+
+_SYNTHESIS_DIR_CASES: dict[str, Callable[[Layout], str]] = {
+    "other-model": lambda sb: str(sb.tool_dir("sintetizador-decomp")),
+    "outside-tools-root": lambda sb: str(sb.tool_dir("cobre-bridge")).replace(
+        "/tools/", "/x/"
+    ),
+    "short-sha": lambda sb: str(sb.tool_dir("cobre-bridge"))[:-1],
+}
+
+
+@pytest.mark.parametrize("case", _SYNTHESIS_DIR_CASES)
+def test_cobre_run_synthesis_tool_dir_outside_the_contract_is_rejected(
+    layout: Layout, case: str
+) -> None:
+    value = _SYNTHESIS_DIR_CASES[case](layout)
+
+    result = _run_cobre_run(layout, {"synthesisToolDir": value})
+
+    _assert_cobre_run_rejected(layout, result, "synthesisToolDir")
 
 
 def test_cobre_run_newave_decomp_mpich_path_is_rejected(layout: Layout) -> None:

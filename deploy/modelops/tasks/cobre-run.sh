@@ -66,5 +66,12 @@ UTILS_DIR=${UTILS_DIR%$'\n'}
 [[ "$UTILS_DIR" =~ ^/[A-Za-z0-9._/-]+/hpc-model-utils/[0-9a-f]{40}$ ]] || fail 'invalid utilsToolDir'
 [[ "${UTILS_DIR%/hpc-model-utils/*}" == '@@env:toolsRoot@@' ]] || fail 'invalid utilsToolDir'
 
+IFS= read -r -d '' SYNTHESIS_DIR <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
+{{synthesisToolDir}}
+HPCMU_{{CurrentExecution.ExecutionId}}
+SYNTHESIS_DIR=${SYNTHESIS_DIR%$'\n'}
+[[ "$SYNTHESIS_DIR" =~ ^/[A-Za-z0-9._/-]+/cobre-bridge/[0-9a-f]{40}$ ]] || fail 'invalid synthesisToolDir'
+[[ "${SYNTHESIS_DIR%/cobre-bridge/*}" == '@@env:toolsRoot@@' ]] || fail 'invalid synthesisToolDir'
+
 cd -- "$WORKDIR"
-exec "$UTILS_DIR/.venv/bin/hpc-model-utils" run "$MODEL" "$QUEUE" "$CORES" --max-cores-per-node "$MAX_CORES" --max-job-time-hours "$JOB_HOURS" --mpich-path "$MPICH_PATH" --slurm-path "$SLURM_PATH"
+exec "$UTILS_DIR/.venv/bin/hpc-model-utils" run "$MODEL" "$QUEUE" "$CORES" --max-cores-per-node "$MAX_CORES" --max-job-time-hours "$JOB_HOURS" --mpich-path "$MPICH_PATH" --slurm-path "$SLURM_PATH" --synthesis-bin "$SYNTHESIS_DIR/.venv/bin/cobre-bridge"

@@ -162,6 +162,7 @@ CAPTURED: dict[str, tuple[str, ...]] = {
         "mpichPath",
         "slurmPath",
         "utilsToolDir",
+        "synthesisToolDir",
     ),
 }
 
