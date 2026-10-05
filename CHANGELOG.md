@@ -6,9 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## The 2.x series
 
-2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. The next release tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)), cleans the logs and adds a cobre results dashboard.
+2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. 2.2.0 tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)), cleans the logs and adds a cobre results dashboard.
 
-## [Unreleased]
+## [2.2.0] - 2026-10-05
 
 ### Behavior changes
 
@@ -36,6 +36,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `docs/runbooks/cobre-rollout.md`: the runbook that applies the cobre definitions to ModelOps and validates cobre on the cluster.
 - cobre builds `sintese/dashboard.html` with `cobre-bridge dashboard` after a successful run with a simulation phase; a dashboard failure keeps `SUCCESS` and is recorded in the annotation and in `synthesis_status`.
 - `deploy/modelops/tasks/ensure-utils.sh` installs cobre-bridge 0.17.0 beside hpc-model-utils, and `deploy/modelops/tasks/cobre-run.sh` passes it to `run` as `--synthesis-bin`.
+
+### Removed
+
+- `setup.sh` and `docker-compose.localstack.yml`; install with `uv sync`, and start LocalStack as the CI does.
 
 ## [2.1.0] - 2026-10-05
 
