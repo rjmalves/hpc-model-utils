@@ -1,4 +1,4 @@
-"""ADR-014/ADR-015/ADR-016/R48/R49/R50/R108/R111/R124 tests for the
+"""ADR-014/ADR-015/R48/R49/R50/R108/R124 tests for the
 DECOMP diagnosis rule table (ticket-051).
 
 Every relato and inviab variant comes from ``tests/support/
@@ -17,7 +17,6 @@ from typing import Literal, cast
 import pytest
 
 from hpc_model_utils.core.diagnosis import (
-    ANNOTATION_MAX_LENGTH,
     RULE_ID_PATTERN,
     EvidenceItem,
     JobReport,
@@ -25,14 +24,9 @@ from hpc_model_utils.core.diagnosis import (
     evaluate,
 )
 from hpc_model_utils.core.lifecycle.prepare import extract_sanitize_inputs
-from hpc_model_utils.core.state import (
-    ParentInfo,
-    RunState,
-    StateStore,
-    ToolInfo,
-)
+from hpc_model_utils.core.state import StateStore
 from hpc_model_utils.core.workspace import Workspace
-from hpc_model_utils.models.decomp import DecompPlugin, cuts, diagnosis
+from hpc_model_utils.models.decomp import DecompPlugin, diagnosis
 from hpc_model_utils.models.decomp.diagnosis import (
     RULES,
     DecompEvidence,
@@ -41,12 +35,7 @@ from hpc_model_utils.models.decomp.diagnosis import (
     _render,
 )
 from tests.support import decomp_outputs
-from tests.support.decks import (
-    FIXTURES,
-    binary_cut_files,
-    decomp_workspace,
-    input_zip,
-)
+from tests.support.decks import FIXTURES, decomp_workspace, input_zip
 from tests.support.decomp_outputs import (
     InviabKind,
     MessageKind,
@@ -60,11 +49,6 @@ plugin = DecompPlugin()
 
 _REPORT = JobReport(None, 0, ())
 _FLEX_DADGER = FIXTURES / "flexibilizador" / "dadger.rv0"
-_PARENT_URI = "s3://outputs-bucket/artifacts/parenthash02"
-_START_2024 = "2024-11-01T00:00:00+00:00"
-_STAGE_WARNING = (
-    "FC stage mismatch: NEWCUT cortes-012.dat, expected cortes-024.dat"
-)
 _OUTPUT_NAMES = (
     "relato.rv0",
     "relato2.rv0",
@@ -391,7 +375,6 @@ def test_diagnose_r108_table_row_returns_expected_winner_and_matched(
     assert verdict.rule_id == row.rule_id
     assert verdict.matched == row.matched
     assert row.reason in verdict.reason
-    assert all(item.source != "dadger FC" for item in verdict.evidence)
     _assert_no_root(ws, verdict.reason, verdict.evidence)
 
 
@@ -580,62 +563,6 @@ def test_evaluate_present_relato_missing_dadger_returns_unknown_diagnosis_except
     assert str(ws.root) not in result.reason
 
 
-# -- AC5: the R111 stage warning ---------------------------------------------
-
-
-def _coupled_2024_workspace(tmp_path: Path) -> Workspace:
-    ws = _workspace(tmp_path, relato=decomp_outputs.relato_bytes("converged"))
-    ws.ensure_layout()
-    state = RunState.new("decomp", ToolInfo("hpc-model-utils", "test"))
-    StateStore(ws).save(
-        replace(state, parent=ParentInfo(_PARENT_URI, "NEWAVE", _START_2024))
-    )
-    input_zip(
-        binary_cut_files(("cortesh.dat", "cortes-012.dat")),
-        ws.parent_dir / "cortes.zip",
-    )
-    plugin.prepare(ws, "x")
-    return ws
-
-
-def test_diagnose_coupled_2024_parent_appends_stage_warning_and_evidence_first(
-    tmp_path: Path,
-) -> None:
-    ws = _coupled_2024_workspace(tmp_path)
-    warning = cuts.stage_warning(ws)
-    assert warning is not None
-
-    verdict = plugin.diagnose(ws, _REPORT)
-
-    assert verdict.status is RunStatus.SUCCESS
-    assert verdict.rule_id == "decomp.converged"
-    assert _STAGE_WARNING in verdict.reason
-    assert verdict.reason.startswith("converged at iteration 13")
-    assert verdict.reason.endswith(f"; {warning}")
-    assert verdict.evidence[0] == EvidenceItem("plugin", "dadger FC", warning)
-    _assert_no_root(ws, verdict.reason, verdict.evidence)
-
-
-def test_evaluate_coupled_2024_parent_annotation_contains_capped_stage_warning(
-    tmp_path: Path,
-) -> None:
-    ws = _coupled_2024_workspace(tmp_path)
-
-    result = evaluate(
-        _REPORT,
-        log_patterns=plugin.log_patterns,
-        primary_evidence=plugin.primary_evidence(ws),
-        rules=lambda: plugin.diagnose(ws, _REPORT),
-        job_id="1",
-    )
-
-    annotation = result.annotation()
-    assert result.status is RunStatus.SUCCESS
-    assert _STAGE_WARNING in annotation
-    assert len(annotation) <= ANNOTATION_MAX_LENGTH
-    assert annotation.endswith("[decomp.converged]")
-
-
 # -- AC6: hygiene ---------------------------------------------------------------
 
 
@@ -652,7 +579,6 @@ _ALL_NONE_EVIDENCE = DecompEvidence(
     zinf=None,
     zsup=None,
     gap=None,
-    stage_warning=None,
 )
 
 _FULLY_POPULATED_EVIDENCE = DecompEvidence(
@@ -671,7 +597,6 @@ _FULLY_POPULATED_EVIDENCE = DecompEvidence(
     zinf=596969161.9,
     zsup=596972236.7,
     gap=0.0005151,
-    stage_warning=_STAGE_WARNING,
 )
 
 

@@ -11,10 +11,9 @@ cannot be satisfied as written is a ``DataError``, never a rewrite.
 Which members are taken from the parent ``cortes.zip`` (staged at
 ``ws.parent_dir`` from the parent's own bucket, R94) and which deck cut
 files survive both follow from FC alone. The calendar stage formula
-(R111) only ever produces a warning here; ticket-079 promotes it.
-
-Nothing is persisted: ``stage_warning`` recomputes from inputs that are
-immutable after ``prepare`` (dadger FC/DT/DP and the recorded parent).
+(R111) checks that NEWCUT names the stage the DECOMP horizon end needs: a
+stage mismatch is a ``DataError``, an incomputable expectation only a
+WARNING.
 
 idecomp is imported lazily, from concrete submodules only (see
 ``deck.py``).
@@ -259,6 +258,10 @@ def _horizon_hours(dadger: Dadger) -> float | None:
 
 
 def _stage(dadger: Dadger, parent_starting_date: str) -> _Stage | None:
+    """R111 assumes the parent NEWAVE study has no pre-study years
+    (``No. DE ANOS PRE 0``, ``MES INICIO PRE-EST 1``): the DECOMP side
+    cannot detect them from the parent start date, and whether they shift
+    ``NNN`` is unknown."""
     dt = dadger.dt
     if dt is None:
         logger.warning("FC stage check skipped: missing DT register")
@@ -360,7 +363,8 @@ def couple(
         parent) not a regular file in the deck
     unsafe parent archive member                    ``UnsafeArchiveError``
     (g) every other top-level cut file              deleted
-    stage mismatch / incomputable                   WARNING only
+    stage mismatch                                  ``DataError``
+    stage incomputable                              WARNING only
     ==============================================  =====================
 
     ``parent`` and ``parent_archive`` are given together or not at all.
@@ -410,7 +414,7 @@ def couple(
         if check is not None:
             expected, mismatch = check
             if mismatch is not None:
-                logger.warning("%s", mismatch)
+                raise DataError(f"{name}: {mismatch}")
 
     coupling = CutCoupling(header, cuts, source, expected)
     logger.info("FC cut coupling: %s", coupling)
@@ -436,19 +440,3 @@ def apply_coupling(ws: Workspace) -> CutCoupling | None:
                 "parent cortes.zip missing; run check_and_fetch_inputs first"
             )
     return couple(ws, parent=parent, parent_archive=archive)
-
-
-def stage_warning(ws: Workspace) -> str | None:
-    """The R111 mismatch text ``couple`` logged, recomputed: ``None``
-    without state, parent or FC pair, for a non-``cortes-NNN.dat``
-    NEWCUT, an incomputable expectation, or a match."""
-    parent = _recorded_parent(ws)
-    if parent is None:
-        return None
-    name = deck.dadger_name(ws)
-    dadger = deck.dadger(ws)
-    header_fc, cuts_fc = read_fc(dadger, name)
-    if header_fc is None or cuts_fc is None:
-        return None
-    check = _stage_check(dadger, cuts_fc, parent.starting_date)
-    return None if check is None else check[1]

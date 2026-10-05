@@ -1,4 +1,4 @@
-"""ADR-014/ADR-015/ADR-016/R48/R49/R50/R108/R111/R124: the DECOMP L2/L3
+"""ADR-014/ADR-015/R48/R49/R50/R108/R124: the DECOMP L2/L3
 diagnosis rules (ticket-051).
 
 R108 keeps v1's precedence (``generate_execution_status``): data error,
@@ -32,7 +32,7 @@ from hpc_model_utils.core.diagnosis import (
 )
 from hpc_model_utils.core.errors import DataError
 from hpc_model_utils.core.workspace import Workspace
-from hpc_model_utils.models.decomp import cuts, deck
+from hpc_model_utils.models.decomp import deck
 
 LOG_PATTERNS: tuple[LogPattern, ...] = (
     LogPattern(
@@ -52,7 +52,6 @@ _OUTPUT_STEMS: tuple[str, ...] = (
     *_INVIAB_STEMS,
     "sumario",
 )
-_STAGE_WARNING_SOURCE = "dadger FC"
 
 # v1's relato messages, matched as substrings of any DefaultBlock line.
 _DATA_ERROR_MESSAGE = "ERRO(S) DE ENTRADA DE DADOS"
@@ -82,7 +81,6 @@ class DecompEvidence:
     zinf: float | None
     zsup: float | None
     gap: float | None
-    stage_warning: str | None
 
 
 def _data_error(evidence: DecompEvidence) -> bool:
@@ -309,7 +307,6 @@ def extract_evidence(ws: Workspace) -> DecompEvidence:
         zinf=relato.zinf,
         zsup=relato.zsup,
         gap=relato.gap,
-        stage_warning=cuts.stage_warning(ws),
     )
 
 
@@ -317,12 +314,6 @@ def _evidence_items(
     job: JobReport, evidence: DecompEvidence
 ) -> tuple[EvidenceItem, ...]:
     items: list[EvidenceItem] = []
-    if evidence.stage_warning:
-        items.append(
-            EvidenceItem(
-                "plugin", _STAGE_WARNING_SOURCE, evidence.stage_warning
-            )
-        )
     items.extend(
         EvidenceItem("plugin", name, "present" if found else "absent")
         for name, found in evidence.present.items()
@@ -348,8 +339,6 @@ def diagnose(ws: Workspace, job: JobReport) -> Verdict:
     applicable = [rule for rule in RULES if rule.applies(evidence)]
     winner = applicable[0]
     reason = _render(winner.template, evidence)
-    if evidence.stage_warning:
-        reason += f"; {evidence.stage_warning}"
     return Verdict(
         status=winner.status,
         rule_id=winner.rule_id,
