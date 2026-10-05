@@ -79,10 +79,9 @@ section "Intended differences", for the full list; the headline changes are:
 
 ## Coming later
 
-The DECOMP FC stage-mismatch check is currently a warning only, appended to
-the annotation. Its promotion to a `DATA_ERROR` outcome is **not** part of
-the v2.0.x releases; it ships in a later change and will be announced in its
-own, separate notice.
+The promotion of the DECOMP FC stage-mismatch check from a warning to a
+`DATA_ERROR` outcome ships in hpc-model-utils v2.2.0 and is announced in its
+own notice, [`v2-fc-stage-mismatch.md`](v2-fc-stage-mismatch.md).
 
 ## Checklist for encadeador developers
 
