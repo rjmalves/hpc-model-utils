@@ -495,3 +495,351 @@ values; it does not remove an uploaded binary.
    aws s3 rm --recursive --dryrun "s3://<versoes-bucket>/versoes/cobre/v0.17.0/"
    aws s3 rm --recursive "s3://<versoes-bucket>/versoes/cobre/v0.17.0/"
    ```
+
+## Validation
+
+This section is the ticket-075 validation (ADR-057, ADR-051, ADR-052, ADR-054,
+ADR-056, R73, R105, R118, R135). It runs after the Upload Versão cobre option
+above has passed. It proves that cobre `v0.17.0` runs from the ModelOps UI
+through the workflow `cobre`, pinned to `hpc-model-utils` `v2.1.0`, on 1 node
+and on 4 nodes × 100 threads. Both shapes launch `cobre-mpi` through
+`srun --mpi=pmix`, with one rank per node. No plain `cobre` binary exists in
+the delivery, and nothing here runs one.
+
+Four rows, run in the order V1, V2, V2b, V3:
+
+- **V1** single node, and **V2** multi-node (the R135 reference shape), on the
+  validation deck;
+- **V2b**, a supplementary EFA provider log, run by hand on the head node;
+- **V3**, the fast-fail relay on a broken deck, on 1 node only. An erroring
+  multi-node MPI job may hold its nodes until the time limit, so V3 never runs
+  on more than one node.
+
+Record evidence only in the private cobre validation record, in the section
+of each row, never here. Each row's `Status:` takes the values of the private
+rollout-evidence record: `PENDING`, `PASS`, `FAIL`, `BLOCKED` or `WAIVED`. A
+waiver is recorded in the private amendments record with its residual
+coverage. This section reuses P1 (the tunnel and token), P4 (the
+`export_execution` function), P7 (the `s3_keys` function and the artifacts
+layout) and the M14 `check_relay` steps of `docs/runbooks/v2-pre-rollout.md`.
+`$EV` is the pre-rollout runbook's evidence directory.
+
+Never mark V1 or V2 `PASS` on a `Success` status alone. The captured script,
+the `Backend:` line, the rank and library evidence and `FI_PROVIDER` are part
+of the criterion.
+
+### Placeholders
+
+| Placeholder | Where its value comes from |
+| --- | --- |
+| `<queue-decomp>` | env `queueDecomp`, the queue default of the workflow `cobre` |
+| `<cobre-mpich-lib>` | the `lib` directory beside env `cobreMpichPath` (which names the cobre MPICH `bin`) |
+| `<root-path>` | env `rootPath`, without its trailing slash |
+| `<inputs-uri>` | the S3 location the operator picks `inputFile` from |
+| `<versoes-bucket>` | env `versionsBucket` |
+| `<artifacts-bucket>`, `<hash>` | env `outputsBucket`, and the execution's ExecutionHash (P7) |
+| `<head-scratch>` | a private scratch directory of the operator on the head node, on the shared filesystem of `<root-path>`: V2b runs from it on compute nodes |
+| `<cobre-checkout>` | a clone of `https://github.com/cobre-rs/cobre` with the tag `v0.17.0` |
+| `<deck-dir>` | a scratch directory on the workstation for the two decks |
+| `<execution-id>` | a ModelOps ExecutionId |
+| `<model-id>`, `<finalize-id>` | the Slurm job ids from the `run` Task's `Submitted batch job` lines: the model job first, then the finalize job |
+| `<suffix>` | the six characters after `cobre_` in the run's `Created temporary dir <root-path>/cobre_<suffix>` line |
+
+### Preconditions
+
+All of the following hold before V1. The first two come first on purpose:
+nothing below may run without them.
+
+1. **The rollout has passed.** In the private rollout-evidence record, the
+   `## Cobre apply` and `## Upload Versão cobre` sections read `Status: PASS`.
+2. **The workflow is visible.** The ModelOps UI lists the workflow `cobre`,
+   and its `modelVersion` offers `v0.17.0`.
+3. **Tunnel and token** per P1 of the pre-rollout runbook, for the P4 exports.
+4. **The head node** has `jq`, `python3`, the AWS CLI and the `s3_keys`
+   function (P7).
+
+If item 1 or 2 is missing, stop. No validation run may start.
+
+### Decks
+
+The validation deck is cobre's public example `examples/4ree` at the tag
+`v0.17.0` (Apache-2.0), zipped under the top folder `4ree/`. Both phases are
+enabled: the training stops at `iteration_limit` 256, and the simulation
+samples 100 scenarios. The fast-fail deck is the same zip with
+`4ree/system/buses.json` replaced by the two bytes `{\n`. cobre rejects it at
+load, after its MPI backend started: exit 1 or 2, a `DataError`.
+
+On the workstation, build both decks with read-only git, then copy them to
+`<inputs-uri>`:
+
+```bash
+git -C <cobre-checkout> archive --format=zip --prefix=4ree/ \
+  -o <deck-dir>/cobre-4ree.zip v0.17.0:examples/4ree
+python3 -c 'import sys, zipfile
+src, dst = sys.argv[1:]
+with zipfile.ZipFile(src) as zi, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zo:
+    for i in zi.infolist():
+        zo.writestr(i, b"{\n" if i.filename == "4ree/system/buses.json" else zi.read(i))
+' <deck-dir>/cobre-4ree.zip <deck-dir>/cobre-4ree-broken.zip
+aws s3 cp <deck-dir>/cobre-4ree.zip <inputs-uri>/cobre-4ree.zip
+aws s3 cp <deck-dir>/cobre-4ree-broken.zip <inputs-uri>/cobre-4ree-broken.zip
+```
+
+`git archive` stamps the members of a tree with the current time, so the zip
+bytes differ between builds. The deck is identified by the tag and the path.
+
+### Capture and download
+
+V1, V2 and V3 collect their evidence the same way. `<row>` is `V1`, `V2` or
+`V3`.
+
+1. **Start the run** of the workflow `cobre` in the UI with the row's inputs.
+   Record the ExecutionId, the parameters you set and the start time (UTC).
+2. **Capture the model script.** While the Task
+   `Executa e acompanha cobre no SLURM` is active, after its first
+   `Submitted batch job <model-id>` line, copy the script on the head node.
+   The run removes its workspace at the end, so the copy cannot be made later.
+
+   ```bash
+   mkdir -p <head-scratch>/cobre/<row>
+   cp <root-path>/cobre_<suffix>/.hpcmu/jobs/model.sbatch <head-scratch>/cobre/<row>/
+   ```
+
+3. **Export the execution** (P4) after it reaches a terminal status:
+   `export_execution <execution-id> "$EV/cobre/<row>"`. The stored
+   `executionArtifactsPath` names `s3://<artifacts-bucket>/artifacts/<hash>/`.
+4. **Download the artifacts** on the head node (P7). V3 publishes no
+   `training/metadata.json`, so skip that copy there.
+
+   ```bash
+   A=s3://<artifacts-bucket>/artifacts/<hash>
+   H=<head-scratch>/cobre/<row>
+   s3_keys "$A/" saidas | tee "$H/saidas.txt"
+   aws s3 cp "$A/saidas/run.json" "$H/"
+   aws s3 cp "$A/saidas/metadata.modelops" "$H/"
+   aws s3 cp "$A/saidas/training/metadata.json" "$H/training-metadata.json"
+   aws s3 cp --recursive "$A/saidas/logs/" "$H/"
+   ```
+
+5. **Copy the files** to `$EV/cobre/<row>/` on the workstation, as in P7.
+
+### V1 single node
+
+**Inputs:** `inputFile` = `<inputs-uri>/cobre-4ree.zip`, `coreCount` 100,
+`maxCoresPerNode` 100, the queue default, `jobTimeoutHours` 1.
+
+**Steps.** Capture and download as above, then run the checks with `K=1`:
+
+```bash
+D="$EV/cobre/V1"; K=1
+L="$D/execution-<execution-id>.log"
+jq -r '.executionStatus, .executionAnnotation' "$D/execution-<execution-id>.json"
+grep -nF 'cobre-mpi: regular ELF executable; comm and solver are verified in the model job' "$L"
+for k in training.zip policy.zip simulation.zip training/metadata.json \
+         simulation/metadata.json run.json metadata.modelops; do
+  grep -qxF "saidas/$k" "$D/saidas.txt" || echo "missing saidas/$k"
+done
+grep '^saidas/logs/' "$D/saidas.txt"
+grep -cxF 'saidas/cortes.zip' "$D/saidas.txt"
+jq -r '.model_name, .study_name' "$D/metadata.modelops"
+S="$D/model.sbatch"
+grep -nxF "#SBATCH --nodes=$K" "$S"
+grep -nxF '#SBATCH --ntasks-per-node=1' "$S"
+grep -nxF '#SBATCH --cpus-per-task=100' "$S"
+grep -nxF '#SBATCH --exclusive' "$S"
+grep -nxF '#SBATCH --partition=<queue-decomp>' "$S"
+grep -nxF 'export LD_LIBRARY_PATH=<cobre-mpich-lib>${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}' "$S"
+grep -nxF 'export FI_PROVIDER=efa' "$S"
+grep -nE '^srun --mpi=pmix --ntasks-per-node=1 .*/assets/cobre-mpi run .* --threads 100 --comm-backend mpi$' "$S"
+grep -cE '/assets/cobre[^-]' "$S"
+M="$D/model-<model-id>.out"
+grep -nF "HPCMU_SHAPE nodes=$K " "$M"
+grep -nE '^ *(Backend|Solver): ' "$M"
+jq '.distribution' "$D/training-metadata.json"
+jq -e --argjson k "$K" '.distribution
+  | .backend == "mpi" and .world_size == $k and .mpi_library == "MPICH 4.2.3"
+    and ($k == 1 or ((.hosts | length) == $k and all(.hosts[]; (.ranks | length) == 1)))' \
+  "$D/training-metadata.json"
+```
+
+**Evidence:** the ExecutionId; the fetch-executables static-check line; the
+status and annotation; the `saidas/` listing; `metadata.modelops` verbatim;
+the captured script and the outputs of its checks, with line numbers; the
+model log's `HPCMU_SHAPE`, `Backend:` and `Solver:` lines; the `distribution`
+object.
+
+**Pass criterion:**
+
+- status `Success`, with the annotation ending `[cobre.completed]`. This also
+  means that `cobre.mpi_not_started` and `cobre.rank_count_mismatch` did not
+  fire;
+- the fetch-executables log has
+  `cobre-mpi: regular ELF executable; comm and solver are verified in the model job`;
+- `saidas/` holds `training.zip`, `policy.zip`, `simulation.zip`,
+  `training/metadata.json`, `simulation/metadata.json`, `run.json`,
+  `metadata.modelops` and the `logs/` files (the loop prints nothing, and
+  `logs/` lists the model and finalize logs), and no `cortes.zip` (the count
+  prints `0`);
+- `metadata.modelops` has `model_name` `COBRE` and `study_name` `4ree`;
+- the captured script holds `#SBATCH --nodes=1`, `#SBATCH --ntasks-per-node=1`
+  and `#SBATCH --cpus-per-task=100`. It exports
+  `LD_LIBRARY_PATH=<cobre-mpich-lib>${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}` and
+  `export FI_PROVIDER=efa`, both at line numbers lower than that of the
+  `srun --mpi=pmix --ntasks-per-node=1 … <root-path>/cobre_<suffix>/assets/cobre-mpi run … --threads 100 --comm-backend mpi`
+  line. `grep -cE '/assets/cobre[^-]'` prints `0`: no plain binary;
+- the model log has `HPCMU_SHAPE nodes=1`, cobre-mpi's own
+  `  Backend:   MPI (MPICH 4.2.3, …)` line, and its `  Solver:    <name> <version>`
+  line;
+- the metadata has `distribution.backend == "mpi"`, `world_size == 1` and
+  `mpi_library == "MPICH 4.2.3"` (`jq -e` prints `true`). On one node cobre
+  leaves `hosts` empty. The NEWAVE and DECOMP MPICH is 4.3.0 (R135), so
+  `MPICH 4.2.3` shows that the `libmpi.so.12` of the cobre install was the one
+  loaded.
+
+### V2 multi-node (R135)
+
+**Inputs:** as V1, with `coreCount` 400 and `jobTimeoutHours` 2. The run is
+4 nodes × 100 threads, one rank per node.
+
+**Steps.**
+
+1. **Record the capacity** on the head node, just before submitting. The
+   queue's nodes are dynamic and boot on demand:
+
+   ```bash
+   { date -u +%Y-%m-%dT%H:%M:%SZ; sinfo -p <queue-decomp> -o '%P %a %D %t'; } \
+     | tee <head-scratch>/cobre/V2-sinfo.txt
+   ```
+
+2. **Capture and download** as above, with `<row>` = `V2`.
+3. **Run the checks** of V1 with `D="$EV/cobre/V2"; K=4`.
+
+**Evidence:** the `sinfo` capacity line with its time, and every V1 evidence
+field.
+
+**Pass criterion:** every V1 criterion for K = 4, that is:
+
+- status `Success`, with the annotation ending `[cobre.completed]`, the
+  fetch-executables static-check line, the same `saidas/` listing and the same
+  `metadata.modelops` values;
+- the captured script holds `#SBATCH --nodes=4`, `#SBATCH --ntasks-per-node=1`,
+  `#SBATCH --cpus-per-task=100`, `#SBATCH --exclusive` and
+  `#SBATCH --partition=<queue-decomp>`, the cobre MPICH `lib` export and
+  `export FI_PROVIDER=efa` before the same `srun --mpi=pmix … --comm-backend mpi`
+  line, and `grep -cE '/assets/cobre[^-]'` prints `0`;
+- the model log has `HPCMU_SHAPE nodes=4`, the `  Backend:   MPI (MPICH 4.2.3, …)`
+  line and the `  Solver:` line;
+- the metadata has `distribution.backend == "mpi"`, `world_size == 4`,
+  `mpi_library == "MPICH 4.2.3"`, and `hosts` with 4 entries of exactly one
+  rank each (`jq -e` prints `true`).
+
+With `FI_PROVIDER=efa`, a `ch4:ofi` MPICH either initializes on EFA or fails
+`MPI_Init`, with no TCP fallback. A `Success` with 4 ranks on 4 hosts is
+therefore the EFA criterion. V2b shows the provider directly.
+
+**If V2 stays `PENDING`:** the follower fails a job held on a never-clearing
+reason fast (ADR-046). Record the row `BLOCKED` with the
+`squeue -j <model-id> -o '%i %T %r'` reason and the `sinfo` line, and retry in
+a later window.
+
+### V2b EFA provider log
+
+A supplementary 2-node run on the head node, outside ModelOps, that logs the
+libfabric provider each rank selected.
+
+**Steps.** On the head node:
+
+1. **Copy the binary and the case** to `<head-scratch>`:
+
+   ```bash
+   aws s3 cp "s3://<versoes-bucket>/versoes/cobre/v0.17.0/cobre-mpi" <head-scratch>/cobre-mpi
+   chmod u+x <head-scratch>/cobre-mpi
+   aws s3 cp <inputs-uri>/cobre-4ree.zip <head-scratch>/cobre-4ree.zip
+   python3 -m zipfile -e <head-scratch>/cobre-4ree.zip <head-scratch>
+   ```
+
+2. **Run** the two ranks:
+
+   ```bash
+   srun -p <queue-decomp> -N 2 --ntasks-per-node=1 --exclusive -t 10 --mpi=pmix \
+     env LD_LIBRARY_PATH=<cobre-mpich-lib> FI_PROVIDER=efa FI_LOG_LEVEL=info \
+     <head-scratch>/cobre-mpi run <head-scratch>/4ree --threads 4 --comm-backend mpi > <head-scratch>/v2b.log 2>&1
+   echo "exit=$?"
+   ```
+
+3. **Count the provider lines:**
+
+   ```bash
+   grep -c ':efa:' <head-scratch>/v2b.log
+   grep -cE ':(tcp|sockets):' <head-scratch>/v2b.log
+   ```
+
+**Evidence:** the time, the exit line, both counts, and the first `:efa:`
+line verbatim. Copy `v2b.log` to `$EV/cobre/V2b/`.
+
+**Pass criterion:** the first count is positive, and the second prints `0`.
+
+**Waiver:** V2b may be `WAIVED`. Record the waiver in the private amendments
+record with its residual: the provider is then shown only indirectly, by
+`export FI_PROVIDER=efa` in both captured scripts and the `Success` 4-rank,
+4-host V2 on a `ch4:ofi` MPICH built against the EFA libfabric.
+
+### V3 fast-fail relay
+
+**Inputs:** as V1, with `inputFile` = `<inputs-uri>/cobre-4ree-broken.zip`.
+1 node only.
+
+**Steps.**
+
+1. **Capture and download** as above, with `<row>` = `V3`: the P4 export, and
+   the P7 log download.
+2. **Read the outcome**, and keep only the `run` Task's stored output:
+
+   ```bash
+   D="$EV/cobre/V3"
+   L="$D/execution-<execution-id>.log"
+   M="$D/model-<model-id>.out"
+   jq -r '.executionStatus, .executionAnnotation' "$D/execution-<execution-id>.json"
+   jq '.diagnosis | {status, rule_id, reason}' "$D/run.json"
+   grep -nE '^ *Backend: +MPI' "$M"
+   grep -nF 'error:' "$M" | head -n 1
+   grep -F '[ExecutionOutput] Executa e acompanha cobre no SLURM: ' "$L" \
+     > "$D/relayed-<execution-id>.txt"
+   ```
+
+3. **Check the relay** (M14), from the repository root:
+
+   ```bash
+   uv run python -m deploy.modelops.check_relay \
+     --relayed "$D/relayed-<execution-id>.txt" \
+     --job-log "$D/model-<model-id>.out" \
+     --job-log "$D/finalize-<finalize-id>.out"
+   ```
+
+**Evidence:** the ExecutionId; both job ids; the status and annotation; the
+`run.json` diagnosis; the `Backend:` line and the first `error:` line, with
+their line numbers; the `check_relay` output verbatim.
+
+**Pass criterion:**
+
+- status `DataError`;
+- the annotation ends `[cobre.validation_error]` or `[cobre.io_error]`, not
+  `[cobre.mpi_not_started]`: the model log shows `Backend:   MPI` at a line
+  number lower than that of the load error;
+- `check_relay` prints `relay: PASS` (exit 0).
+
+### If a row fails
+
+Record `FAIL` with the annotation, the diagnosis `rule_id` from `run.json`
+(`jq '.diagnosis | {status, rule_id, reason, evidence}' "$D/run.json"`) and
+the logs. Do not re-run V2 before diagnosing. A failure here reopens the
+ticket that owns the failing part; no definition changes in this section.
+
+- **A fetch-executables `DataError` from the static check** points at the
+  uploaded file under `versoes/cobre/v0.17.0/` (the Upload Versão cobre
+  option).
+- **`cobre.mpi_not_started`** points at the cobre MPICH path, PMIx or EFA, on
+  that run's shape. On V1 it rules out the multi-node wiring.
+- **`cobre.rank_count_mismatch`** points at the PMIx wiring. That is ADR-057's
+  rework trigger: escalate to the operator, and never switch the launcher
+  silently.
