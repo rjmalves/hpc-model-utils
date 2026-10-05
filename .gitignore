@@ -26,7 +26,6 @@ coverage.xml
 
 # LocalStack
 .env.localstack
-localstack-data/
 
 # Implementation plans
 plans/
