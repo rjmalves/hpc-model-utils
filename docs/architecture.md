@@ -278,10 +278,11 @@ sequenceDiagram
 
 The job-side step is
 `src/hpc_model_utils/core/lifecycle/finalize.py::finalize`. It diagnoses the
-model job; runs postprocess and the sintetizador only on `SUCCESS`; always
-realizes the output plan; and writes `finalize.json` once. A sintetizador
+model job; runs postprocess and the synthesis step (sintetizador for NEWAVE
+and DECOMP, `cobre-bridge dashboard` for cobre) only on `SUCCESS`; always
+realizes the output plan; and writes `finalize.json` once. A synthesis tool
 that exits non-zero or a postprocess that raises keeps `SUCCESS` but records
-the failure in the reason and the evidence. A missing sintetizador becomes
+the failure in the reason and the evidence. A missing synthesis tool becomes
 `RUNTIME_ERROR` with `core.synthesis_missing`.
 
 Realizing outputs is
@@ -331,7 +332,7 @@ to ModelOps (ADR-046):
   unexpected exception keeps its traceback
   (`src/hpc_model_utils/cli/root.py::main` and its fatal path).
 
-Sintetizador output is not relayed in full. The finalize job writes its
+Synthesis output is not relayed in full. The finalize job writes its
 complete merged output to `.hpcmu/logs/synthesis.out`, relays only the lines
 at WARNING level or above, and `publish` uploads the file as
 `saidas/logs/synthesis.out`. If the file cannot be written, every line is
@@ -355,9 +356,11 @@ and the apply procedure are in
 ## Adding a model
 
 cobre is the worked example. It was added without any change to `core/`, and
-the numbered checklist below follows the order it was built in. Replace
-`cobre` with the new model's name. All paths are relative to the repository
-root.
+the numbered checklist below follows the order it was built in. The later
+cobre dashboard needed one contract change: `synthesis_args` takes the
+workspace (`synthesis_args(ws, cpus)`), so a plugin can name its case
+directory. Replace `cobre` with the new model's name. All paths are relative
+to the repository root.
 
 1. **Add a platform identifier first, if the model needs a new workflow
    parameter.** cobre needed `--max-cores-per-node`, so `maxCoresPerNode`
@@ -446,3 +449,9 @@ root.
   upgrade, and update
   `src/hpc_model_utils/models/cobre/diagnosis.py::TERMINATION_REASONS` and
   the matching patterns if they changed.
+- The dashboard comes from cobre-bridge `v0.17.0`, pinned in the cobre
+  workflow as `synthesisAppVersion`/`synthesisAppSha` and installed by
+  `ensure-utils`; it runs only when `output/simulation/` exists
+  (`src/hpc_model_utils/models/cobre/outputs.py::dashboard_args`);
+  cobre-bridge requires `cobre-python` below 0.18, so re-pin it with every
+  cobre upgrade.

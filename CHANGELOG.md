@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## The 2.x series
 
-2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. The next release tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)) and cleans the logs.
+2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. The next release tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)), cleans the logs and adds a cobre results dashboard.
 
 ## [Unreleased]
 
@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - A chained DECOMP run whose dadger `FC NEWCUT` names a `cortes-NNN.dat` other than the stage its horizon end needs now fails in `preprocess` with `DATA_ERROR` (`SetDataError`) before any job is submitted; 2.0.0 to 2.1.0 only appended the mismatch to the annotation. See [`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md).
 - The synthesis step's failure messages name the tool neutrally for every model: a failed step reads `synthesis failed: synthesis tool exited <n>` instead of `synthesis failed: sintetizador exited <n>`, and a missing binary reads `synthesis tool binary not found; tried: …`, with `; pass --synthesis-bin` when the option was not given; the `synthesis failed:` prefix, the statuses, the rule ids and `synthesis_status` are unchanged.
+- A successful cobre run with a simulation phase now runs the synthesis step, so a direct `run cobre` outside ModelOps needs `--synthesis-bin` pointing at cobre-bridge; without it the run ends `RUNTIME_ERROR` (`core.synthesis_missing`), as NEWAVE and DECOMP already do without a sintetizador.
 
 ### Changed
 
@@ -21,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - The finalize job log keeps only sintetizador's WARNING-or-above lines and a one-line summary; the full output is in `saidas/logs/synthesis.out`.
 - A typed error (`DataError`, `UsageError`, …) on a command's fatal path is logged as one `<command> failed: <category>: <message>` line instead of a traceback; unexpected exceptions keep the traceback.
 - `deploy/modelops/check_relay.py` reads the verbatim relay and still reads the prefixed relay of 2.0.x and 2.1.0 runs.
+- `ModelPlugin.synthesis_args` takes the workspace as its first argument (`synthesis_args(ws, cpus)`); NEWAVE and DECOMP behavior is unchanged.
+- `deploy/modelops/apply.py` verifies the cobre workflow's synthesis pin against the cobre-bridge repository.
 
 ### Added
 
@@ -31,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `deploy/modelops/tasks/`: the seven shared Tasks (`create-workdir`, `remove-workdir`, `fetch-executables`, `fetch-inputs`, `extract-sanitize`, `result-upload` and `cancel-run`) accept the model `cobre`.
 - `deploy/modelops/workflows/upload-versao.json`: `Upload Versão` offers the model `cobre` and runs upload-versoes-cli 1.1.0.
 - `docs/runbooks/cobre-rollout.md`: the runbook that applies the cobre definitions to ModelOps and validates cobre on the cluster.
+- cobre builds `sintese/dashboard.html` with `cobre-bridge dashboard` after a successful run with a simulation phase; a dashboard failure keeps `SUCCESS` and is recorded in the annotation and in `synthesis_status`.
+- `deploy/modelops/tasks/ensure-utils.sh` installs cobre-bridge 0.17.0 beside hpc-model-utils, and `deploy/modelops/tasks/cobre-run.sh` passes it to `run` as `--synthesis-bin`.
 
 ## [2.1.0] - 2026-10-05
 
