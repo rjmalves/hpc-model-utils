@@ -1,10 +1,9 @@
 """deploy.modelops.apply: the ModelOps operator CLI (ADR-033, R98).
 
-Run as ``uv run python -m deploy.modelops.apply <command>``. Ticket-060a
-added the read-only ``snapshot`` command; ticket-063 added ``sync``, the
-read-only dry run; ticket-063a adds ``sync --apply``, the only write path
-(ADR-033): ``plan()`` computes the dry run, ``execute()`` checks every
-precondition, asks for the typed confirmation and then writes.
+Run as ``uv run python -m deploy.modelops.apply <command>``. ``snapshot``
+is read-only and ``sync`` is a read-only dry run; ``sync --apply`` is the
+only write path (ADR-033): ``plan()`` computes the dry run, ``execute()``
+checks every precondition, asks for the typed confirmation and then writes.
 
 Every command-level failure -- a bad ``--out``, a ``ConfigError`` from
 the environment, an ``EnvFileError`` from ``--env-file``, an
