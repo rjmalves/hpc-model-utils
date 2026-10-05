@@ -330,8 +330,10 @@ def test_decompplugin_launch_without_max_cores_per_node_omits_ntasks_per_node(
     assert spec.env == {}
 
 
-def test_decompplugin_synthesis_args_returns_expected_tuple() -> None:
-    assert DecompPlugin().synthesis_args(8) == (
+def test_decompplugin_synthesis_args_returns_expected_tuple(
+    tmp_path: Path,
+) -> None:
+    assert DecompPlugin().synthesis_args(Workspace.at(tmp_path), 8) == (
         "completa",
         "--processadores",
         "8",

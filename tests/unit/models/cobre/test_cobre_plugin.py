@@ -72,8 +72,8 @@ def test_declarations_package_reexports_only_the_plugin() -> None:
     assert cobre.CobrePlugin is CobrePlugin
 
 
-def test_declarations_synthesis_args_is_none() -> None:
-    assert CobrePlugin().synthesis_args(4) is None
+def test_declarations_synthesis_args_is_none(tmp_path: Path) -> None:
+    assert CobrePlugin().synthesis_args(Workspace.at(tmp_path), 4) is None
 
 
 def test_declarations_abc_defaults_for_unused_hooks(tmp_path: Path) -> None:

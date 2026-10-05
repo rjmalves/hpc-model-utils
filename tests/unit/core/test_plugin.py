@@ -158,12 +158,12 @@ def test_check_executables_default_is_noop(tmp_path: Path) -> None:
     _MinimalPlugin().check_executables(ws)
 
 
-def test_synthesis_args_default_returns_none() -> None:
-    assert _MinimalPlugin().synthesis_args(4) is None
+def test_synthesis_args_default_returns_none(tmp_path: Path) -> None:
+    assert _MinimalPlugin().synthesis_args(Workspace.at(tmp_path), 4) is None
 
 
-def test_synthesis_args_fake_returns_tuple() -> None:
-    assert FakePlugin().synthesis_args(4) == (
+def test_synthesis_args_fake_returns_tuple(tmp_path: Path) -> None:
+    assert FakePlugin().synthesis_args(Workspace.at(tmp_path), 4) == (
         "completa",
         "--processadores",
         "4",

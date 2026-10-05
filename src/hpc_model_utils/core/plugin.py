@@ -136,7 +136,9 @@ class ModelPlugin(ABC):
     def postprocess(self, ws: Workspace) -> None:
         return None
 
-    def synthesis_args(self, cpus: int) -> tuple[str, ...] | None:
+    def synthesis_args(
+        self, ws: Workspace, cpus: int
+    ) -> tuple[str, ...] | None:
         return None
 
     def check_executables(self, ws: Workspace) -> None:

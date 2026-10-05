@@ -111,13 +111,29 @@ class _RaisingOutputsPlugin(FakePlugin):
 
 
 class _RaisingSynthesisArgsPlugin(FakePlugin):
-    def synthesis_args(self, cpus: int) -> tuple[str, ...] | None:
+    def synthesis_args(
+        self, ws: Workspace, cpus: int
+    ) -> tuple[str, ...] | None:
         raise RuntimeError("args-boom")
 
 
 class _NoSynthesisArgsPlugin(FakePlugin):
-    def synthesis_args(self, cpus: int) -> tuple[str, ...] | None:
+    def synthesis_args(
+        self, ws: Workspace, cpus: int
+    ) -> tuple[str, ...] | None:
         return None
+
+
+class _SynthesisArgsCapturingPlugin(FakePlugin):
+    captured_ws: Workspace | None = None
+    captured_cpus: int | None = None
+
+    def synthesis_args(
+        self, ws: Workspace, cpus: int
+    ) -> tuple[str, ...] | None:
+        self.captured_ws = ws
+        self.captured_cpus = cpus
+        return super().synthesis_args(ws, cpus)
 
 
 class _CapturingPlugin(FakePlugin):
@@ -590,6 +606,29 @@ def test_finalize_synthesis_args_raises_records_synthesis_failure(
     assert record.synthesis.ok is False
     assert record.synthesis.detail == "args-boom"
     assert record.diagnosis.reason.startswith("synthesis failed: args-boom; ")
+
+
+def test_finalize_passes_its_workspace_to_synthesis_args(
+    tmp_path: Path,
+) -> None:
+    ws = _prepare_workspace(tmp_path)
+    _install_legacy_sintetizador(ws, "fake")
+    plugin = _SynthesisArgsCapturingPlugin()
+
+    record = finalize(
+        ws,
+        plugin,
+        StubSlurm(_job_outcome()),
+        model_job_id="111",
+        cores=2,
+        synthesis_bin=None,
+        settings=_SETTINGS,
+        emit=_noop,
+    )
+
+    assert record.diagnosis.status is RunStatus.SUCCESS
+    assert plugin.captured_ws is ws
+    assert plugin.captured_cpus == min(2, physical_cores())
 
 
 def test_finalize_explicit_synthesis_bin_missing_ignores_existing_legacy(

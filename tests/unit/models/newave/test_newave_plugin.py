@@ -303,8 +303,10 @@ def test_newaveplugin_launch_without_max_cores_per_node_omits_ntasks_per_node(
     assert spec.env == {}
 
 
-def test_newaveplugin_synthesis_args_returns_expected_tuple() -> None:
-    assert NewavePlugin().synthesis_args(12) == (
+def test_newaveplugin_synthesis_args_returns_expected_tuple(
+    tmp_path: Path,
+) -> None:
+    assert NewavePlugin().synthesis_args(Workspace.at(tmp_path), 12) == (
         "completa",
         "--processadores",
         "12",

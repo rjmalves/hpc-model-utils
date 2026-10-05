@@ -97,7 +97,9 @@ class NewavePlugin(ModelPlugin):
             cpus_per_task=2,
         )
 
-    def synthesis_args(self, cpus: int) -> tuple[str, ...] | None:
+    def synthesis_args(
+        self, ws: Workspace, cpus: int
+    ) -> tuple[str, ...] | None:
         return ("completa", "--processadores", str(cpus))
 
     def primary_evidence(self, ws: Workspace) -> tuple[Path, ...]:

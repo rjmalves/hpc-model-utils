@@ -216,10 +216,10 @@ def _run_postprocess(
 
 
 def _resolve_synthesis_args(
-    plugin: ModelPlugin, cpus: int
+    plugin: ModelPlugin, ws: Workspace, cpus: int
 ) -> tuple[tuple[str, ...] | None, str | None]:
     try:
-        return plugin.synthesis_args(cpus), None
+        return plugin.synthesis_args(ws, cpus), None
     except Exception as exc:
         # plugin-supplied call, fault-isolated under R137 (recorded as
         # the synthesis step failing); never BaseException.
@@ -451,7 +451,7 @@ def finalize(
     if diag.status is RunStatus.SUCCESS:
         diag, postprocess_outcome = _run_postprocess(plugin, ws, diag)
         cpus = min(cores, physical_cores())
-        args, args_error = _resolve_synthesis_args(plugin, cpus)
+        args, args_error = _resolve_synthesis_args(plugin, ws, cpus)
         if args_error is not None:
             synthesis_outcome = StepOutcome("synthesis", False, args_error, 0.0)
             diag = _record_step_failure(diag, "synthesis", args_error)
