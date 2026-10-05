@@ -109,7 +109,7 @@ def test_model_arg_convert_unknown_name_raises_usage_error() -> None:
 def test_model_arg_get_metavar_lists_sorted_registry_keys() -> None:
     ctx, param = _click_probe()
 
-    assert ModelArg().get_metavar(param, ctx) == "decomp|newave"
+    assert ModelArg().get_metavar(param, ctx) == "cobre|decomp|newave"
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ def test_run_command_unknown_model_exits_2_lists_valid_models() -> None:
 
     assert result.exit_code == 2
     assert "unknown model 'NOSUCH'" in result.output
-    assert "['decomp', 'newave']" in result.output
+    assert "['cobre', 'decomp', 'newave']" in result.output
 
 
 def test_extract_sanitize_inputs_command_fake_model_resolves_fake_plugin(

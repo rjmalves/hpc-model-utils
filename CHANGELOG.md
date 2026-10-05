@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.0] - 2026-10-05
+
+NEWAVE and DECOMP behavior is unchanged from 2.0.2.
+
+### Added
+
+- The cobre model plugin: `hpc-model-utils <command> cobre` runs native cobre case zips (with or without a top-level folder) with the MPI build `cobre-mpi` only, on one or several nodes, through `srun --mpi=pmix` with one rank per node and `--comm-backend mpi`; `check_and_fetch_executables` checks `cobre-mpi` statically (a regular, owner-executable ELF file) and never runs it.
+- `run cobre` requires `--max-cores-per-node`: threads per node T = max_cores_per_node and nodes K = cores / T, and cores must be a multiple of T.
+- The cobre outcome mapping: a run whose model log never shows cobre-mpi's `Backend:   MPI` line is `RUNTIME_ERROR`; otherwise exits 1 and 2 are `DATA_ERROR` and exits 3 and 4 are `RUNTIME_ERROR`; a run that exits 0 is `SUCCESS` only when every enabled phase wrote its metadata, training completed, and every simulation scenario completed; never `INFEASIBLE`.
+- cobre artifacts: `saidas/training.zip`, `saidas/policy.zip`, `saidas/simulation.zip` and the raw `saidas/training/metadata.json` and `saidas/simulation/metadata.json`; no sintetizador step.
+- The platform-identifier set covers the `maxCoresPerNode` workflow parameter.
+
 ## [2.0.2] - 2026-10-04
 
 ### Fixed

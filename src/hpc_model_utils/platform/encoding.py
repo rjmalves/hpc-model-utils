@@ -27,6 +27,7 @@ PLATFORM_IDENTIFIERS: frozenset[str] = frozenset(
         "inputFile",
         "jobId",
         "jobTimeoutHours",
+        "maxCoresPerNode",
         "modelName",
         "modelVersion",
         "mpichPath",

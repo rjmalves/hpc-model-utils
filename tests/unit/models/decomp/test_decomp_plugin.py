@@ -283,8 +283,8 @@ def test_get_plugin_both_cases_return_same_registered_decomp_instance() -> None:
     assert isinstance(get_plugin("decomp"), DecompPlugin)
 
 
-def test_sorted_plugins_returns_decomp_and_newave() -> None:
-    assert sorted(models.PLUGINS) == ["decomp", "newave"]
+def test_sorted_plugins_returns_cobre_decomp_and_newave() -> None:
+    assert sorted(models.PLUGINS) == ["cobre", "decomp", "newave"]
 
 
 def test_import_models_package_does_not_import_idecomp() -> None:
