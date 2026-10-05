@@ -10,7 +10,7 @@ files, and the real values live only in an uncommitted environment file
 
 | Path | Content |
 | --- | --- |
-| `workflows/<slug>.json` | One Workflow document: `newave-pem`, `decomp-pem`, `upload-newave`, `ranqueamento`, `upload-versao` |
+| `workflows/<slug>.json` | One Workflow document: `newave-pem`, `decomp-pem`, `upload-newave`, `ranqueamento`, `upload-versao`, `cobre` |
 | `tasks/<slug>.json` | One Task document without its `script` |
 | `tasks/<slug>.sh` | The Task's script, verbatim, LF line endings |
 | `env/prd.example.json` | The environment file shape, dummy values only |
@@ -20,6 +20,9 @@ files, and the real values live only in an uncommitted environment file
 Audit fields (`_id`, `createdBy`, `createdDate`, `lastChangeBy`,
 `lastChangeDate`, `scheduleStatus`) are never committed. The apply script sets
 `createdBy` and `lastChangeBy` when it writes.
+
+`cobre-run` and `ensure-utils` are cobre's own Tasks, and the seven shared
+Tasks accept `cobre` (ticket-072b).
 
 ## Placeholder grammar
 

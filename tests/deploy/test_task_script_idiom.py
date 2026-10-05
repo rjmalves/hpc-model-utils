@@ -53,6 +53,8 @@ SLUGS = (
     "ingest-offline",
 )
 ENSURE_SLUG = "ensure-tools"
+ENSURE_SLUGS = (ENSURE_SLUG, "ensure-utils")
+COBRE_SLUGS = ("cobre-run",)
 CLI_SLUGS = tuple(
     slug for slug in SLUGS if slug not in ("create-workdir", "remove-workdir")
 )
@@ -73,6 +75,7 @@ PARAMETER_VARIABLES = {
     "queue": "QUEUE",
     "modelVersion": "MODEL_VERSION",
     "jobTimeoutHours": "JOB_HOURS",
+    "maxCoresPerNode": "MAX_CORES",
     "mpichPath": "MPICH_PATH",
     "slurmPath": "SLURM_PATH",
     "outputsBucket": "OUTPUTS_BUCKET",
@@ -144,6 +147,17 @@ CAPTURED: dict[str, tuple[str, ...]] = {
         "utilsAppSha",
         "synthesisAppSha",
     ),
+    "ensure-utils": ("utilsAppVersion", "utilsAppSha"),
+    "cobre-run": (
+        *_BASE,
+        "queue",
+        "coreCount",
+        "maxCoresPerNode",
+        "jobTimeoutHours",
+        "mpichPath",
+        "slurmPath",
+        "utilsToolDir",
+    ),
 }
 
 FIXED_LINES = (
@@ -163,6 +177,7 @@ FINAL_LINES = {
     "create-workdir": "printf 'Created temporary dir %s\\n' \"$WORKDIR\"",
     "remove-workdir": 'rm -r -- "$WORKDIR"',
     ENSURE_SLUG: ENSURE_TERMINATOR,
+    "ensure-utils": ENSURE_TERMINATOR,
 }
 
 _NAME = r"[A-Z][A-Z_]*"
@@ -356,13 +371,13 @@ def lint_script(slug: str, text: str) -> list[str]:
                 f"{where}:{number}: placement: template reference outside"
                 " a capture"
             )
-        elif slug == ENSURE_SLUG and index == last - 2:
+        elif slug in ENSURE_SLUGS and index == last - 2:
             if _ENSURE_EXEC_LINE.fullmatch(line) is None:
                 errors.append(
                     f"{where}:{number}: closed-set: line is not the"
                     " exec bash -s line"
                 )
-        elif slug == ENSURE_SLUG and index == last - 1:
+        elif slug in ENSURE_SLUGS and index == last - 1:
             if line != ENSURE_SCRIPT_LINE:
                 errors.append(
                     f"{where}:{number}: closed-set: line is not the"
@@ -441,14 +456,14 @@ def test_lint_real_tree_reports_nothing() -> None:
     require(check_scripts(TASKS))
 
 
-def test_lint_covers_exactly_the_ten_v2_scripts_and_ensure_tools() -> None:
+def test_lint_covers_exactly_the_v2_scripts() -> None:
     v2 = {
         path.stem
         for path in TASKS.glob("*.sh")
         if not path.stem.startswith("v1-")
     }
 
-    assert v2 == {*SLUGS, ENSURE_SLUG}
+    assert v2 == {*SLUGS, *ENSURE_SLUGS, *COBRE_SLUGS}
 
 
 def test_lint_v1_baseline_is_not_checked(tasks: Path) -> None:
@@ -849,7 +864,7 @@ def test_ensure_lint_script_holds_no_terminator_line() -> None:
         require(lint_ensure_script(f"#!x\n{ENSURE_TERMINATOR}\n{script}"))
 
 
-@pytest.mark.parametrize("slug", [*SLUGS, ENSURE_SLUG])
+@pytest.mark.parametrize("slug", [*SLUGS, *ENSURE_SLUGS, *COBRE_SLUGS])
 def test_scripts_capture_the_requirement_1_parameters(slug: str) -> None:
     text = (TASKS / f"{slug}.sh").read_text(encoding="utf-8")
     names = set(re.findall(r"\{\{(.*?)\}\}", text)) - {EXECUTION_ID_PARAMETER}
@@ -857,7 +872,7 @@ def test_scripts_capture_the_requirement_1_parameters(slug: str) -> None:
     assert names == set(CAPTURED[slug])
 
 
-@pytest.mark.parametrize("slug", [*SLUGS, ENSURE_SLUG])
+@pytest.mark.parametrize("slug", [*SLUGS, *ENSURE_SLUGS, *COBRE_SLUGS])
 def test_scripts_pass_bash_syntax_check(slug: str) -> None:
     result = subprocess.run(
         ["bash", "-n", str(TASKS / f"{slug}.sh")],
@@ -981,10 +996,30 @@ TASK_DOCUMENTS: dict[str, dict[str, Any]] = {
         "hidden": False,
         "observation": "Instala ou reutiliza instalacoes imutaveis de ferramentas, uma por commit",
     },
+    "ensure-utils": {
+        "taskName": "Garante hpc-model-utils versionado",
+        "description": "Instala ou reutiliza a instalacao imutavel do hpc-model-utils, uma por commit",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.1.0",
+        "hidden": False,
+        "observation": "Instala ou reutiliza a instalacao imutavel do hpc-model-utils, uma por commit",
+    },
+    "cobre-run": {
+        "taskName": "Executa e acompanha cobre no SLURM",
+        "description": "Executa o cobre através da submissão de jobs ao SLURM e acompanha a execução",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.1.0",
+        "hidden": False,
+        "observation": "Executa o cobre através da submissão de jobs ao SLURM e acompanha a execução",
+    },
 }
 
 
-@pytest.mark.parametrize("slug", [*SLUGS, ENSURE_SLUG])
+@pytest.mark.parametrize("slug", [*SLUGS, *ENSURE_SLUGS, *COBRE_SLUGS])
 def test_task_documents_carry_the_switch_names(slug: str) -> None:
     document = json.loads((TASKS / f"{slug}.json").read_text(encoding="utf-8"))
 
@@ -1592,6 +1627,75 @@ def test_behavior_execution_id_is_validated_before_any_capture(
     assert layout.calls == []
 
 
+WIDENED_SLUGS = (
+    "create-workdir",
+    "remove-workdir",
+    "fetch-executables",
+    "fetch-inputs",
+    "extract-sanitize",
+    "result-upload",
+    "cancel-run",
+)
+
+
+def test_widened_scripts_accept_cobre_in_both_closed_sets() -> None:
+    for slug in WIDENED_SLUGS:
+        text = (TASKS / f"{slug}.sh").read_text(encoding="utf-8")
+
+        assert "^(newave|decomp|cobre)$" in text, slug
+        assert "/(newave|decomp|cobre)_[A-Za-z0-9]{6}$" in text, slug
+        assert "^(newave|decomp)$" not in text, slug
+
+
+def test_behavior_cobre_create_workdir_prints_a_cobre_path(
+    layout: Layout,
+) -> None:
+    result = _run(layout, "create-workdir", model="cobre")
+
+    printed = re.fullmatch(
+        rf"Created temporary dir ({re.escape(str(layout.root))}"
+        r"/cobre_[A-Za-z0-9]{6})\n",
+        result.stdout,
+    )
+    assert printed is not None
+    assert result.returncode == 0 and result.stderr == ""
+    assert Path(printed.group(1)).is_dir()
+
+
+def test_behavior_cobre_remove_workdir_removes_the_directory(
+    layout: Layout,
+) -> None:
+    (layout.workdir("cobre") / "inner").mkdir(parents=True)
+
+    result = _run(layout, "remove-workdir", model="cobre")
+
+    assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
+    assert not layout.workdir("cobre").exists()
+    assert layout.root.is_dir()
+
+
+@pytest.mark.parametrize(
+    "slug", [slug for slug in CLI_SLUGS if slug in WIDENED_SLUGS]
+)
+def test_behavior_cobre_cli_argv_equals_the_command(
+    layout: Layout, slug: str
+) -> None:
+    layout.workdir("cobre").mkdir()
+
+    result = _run(layout, slug, model="cobre")
+
+    _assert_called_once_with(layout, slug, result, model="cobre")
+
+
+@pytest.mark.parametrize("slug", ["run", "preprocess", "ingest-offline"])
+def test_behavior_cobre_is_rejected_by_the_closed_tasks(
+    layout: Layout, slug: str
+) -> None:
+    result = _run(layout, slug, model="cobre")
+
+    _assert_rejected(layout, result, "modelName")
+
+
 ENSURE_PYTHON = "3.12.13"
 ENSURE_UTILS_TAG = "v2.0.2"
 ENSURE_UTILS_SHA = "a" * 40
@@ -1697,8 +1801,9 @@ def _run_ensure(
     overrides: Mapping[str, str] | None = None,
     *,
     model: str = "newave",
+    slug: str = ENSURE_SLUG,
 ) -> subprocess.CompletedProcess[str]:
-    task = render_task(ENSURE_SLUG, MODELOPS, load_env(sandbox.env_file))
+    task = render_task(slug, MODELOPS, load_env(sandbox.env_file))
     script = prepare_command(
         task["script"], {**sandbox.values(model), **(overrides or {})}
     )
@@ -1850,3 +1955,11 @@ def test_ensure_behavior_invalid_value_is_rejected(
     result = _run_ensure(ensure_sandbox, {parameter: value})
 
     _assert_ensure_rejected(ensure_sandbox, result, parameter)
+
+
+def test_ensure_behavior_cobre_model_is_rejected(
+    ensure_sandbox: EnsureSandbox,
+) -> None:
+    result = _run_ensure(ensure_sandbox, model="cobre")
+
+    _assert_ensure_rejected(ensure_sandbox, result, "modelName")

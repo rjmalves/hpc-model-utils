@@ -7,7 +7,7 @@ IFS= read -r -d '' MODEL <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
 {{modelName}}
 HPCMU_{{CurrentExecution.ExecutionId}}
 MODEL=${MODEL%$'\n'}
-[[ "$MODEL" =~ ^(newave|decomp|cobre)$ ]] || fail 'invalid modelName'
+[[ "$MODEL" =~ ^cobre$ ]] || fail 'invalid modelName'
 
 IFS= read -r -d '' ROOT_PATH <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
 {{rootPath}}
@@ -19,15 +19,39 @@ IFS= read -r -d '' WORKDIR <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
 {{path}}
 HPCMU_{{CurrentExecution.ExecutionId}}
 WORKDIR=${WORKDIR%$'\n'}
-[[ "$WORKDIR" =~ ^/[A-Za-z0-9._/-]+/(newave|decomp|cobre)_[A-Za-z0-9]{6}$ ]] || fail 'invalid path'
+[[ "$WORKDIR" =~ ^/[A-Za-z0-9._/-]+/cobre_[A-Za-z0-9]{6}$ ]] || fail 'invalid path'
 [[ "${WORKDIR%/*}" == "${ROOT_PATH%/}" ]] || fail 'invalid path'
 [[ "${WORKDIR##*/}" == "${MODEL}_"* ]] || fail 'invalid path'
 
-IFS= read -r -d '' JOB_ID <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
-{{jobId}}
+IFS= read -r -d '' QUEUE <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
+{{queue}}
 HPCMU_{{CurrentExecution.ExecutionId}}
-JOB_ID=${JOB_ID%$'\n'}
-[[ "$JOB_ID" =~ ^[0-9]*$ ]] || fail 'invalid jobId'
+QUEUE=${QUEUE%$'\n'}
+[[ "$QUEUE" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || fail 'invalid queue'
+
+IFS= read -r -d '' CORES <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
+{{coreCount}}
+HPCMU_{{CurrentExecution.ExecutionId}}
+CORES=${CORES%$'\n'}
+[[ "$CORES" =~ ^[1-9][0-9]{0,5}$ ]] || fail 'invalid coreCount'
+
+IFS= read -r -d '' MAX_CORES <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
+{{maxCoresPerNode}}
+HPCMU_{{CurrentExecution.ExecutionId}}
+MAX_CORES=${MAX_CORES%$'\n'}
+[[ "$MAX_CORES" =~ ^[1-9][0-9]{0,3}$ ]] || fail 'invalid maxCoresPerNode'
+
+IFS= read -r -d '' JOB_HOURS <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
+{{jobTimeoutHours}}
+HPCMU_{{CurrentExecution.ExecutionId}}
+JOB_HOURS=${JOB_HOURS%$'\n'}
+[[ "$JOB_HOURS" =~ ^[1-9][0-9]{0,3}$ ]] || fail 'invalid jobTimeoutHours'
+
+IFS= read -r -d '' MPICH_PATH <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
+{{mpichPath}}
+HPCMU_{{CurrentExecution.ExecutionId}}
+MPICH_PATH=${MPICH_PATH%$'\n'}
+[[ "$MPICH_PATH" == '@@env:cobreMpichPath@@' ]] || fail 'invalid mpichPath'
 
 IFS= read -r -d '' SLURM_PATH <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
 {{slurmPath}}
@@ -43,4 +67,4 @@ UTILS_DIR=${UTILS_DIR%$'\n'}
 [[ "${UTILS_DIR%/hpc-model-utils/*}" == '@@env:toolsRoot@@' ]] || fail 'invalid utilsToolDir'
 
 cd -- "$WORKDIR"
-exec "$UTILS_DIR/.venv/bin/hpc-model-utils" cancel_run "$MODEL" --job-id "$JOB_ID" --slurm-path "$SLURM_PATH"
+exec "$UTILS_DIR/.venv/bin/hpc-model-utils" run "$MODEL" "$QUEUE" "$CORES" --max-cores-per-node "$MAX_CORES" --max-job-time-hours "$JOB_HOURS" --mpich-path "$MPICH_PATH" --slurm-path "$SLURM_PATH"
