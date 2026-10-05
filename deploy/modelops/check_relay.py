@@ -109,7 +109,7 @@ def expected_lines(paths: Sequence[Path]) -> list[str]:
 
 def _split_lines(text: str) -> list[str]:
     parts = _LINE_SPLIT_RE.split(text)
-    if parts and parts[-1] == "":
+    if parts[-1] == "":
         parts = parts[:-1]
     return parts
 

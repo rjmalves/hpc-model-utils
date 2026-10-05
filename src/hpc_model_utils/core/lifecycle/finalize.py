@@ -233,12 +233,12 @@ def _resolve_synthesis_bin(
     """R101/amendment 3: an explicit ``synthesis_bin`` is used exactly,
     with no legacy fallback. Only its absence lets the legacy
     workspace path apply."""
-    if synthesis_bin is not None:
-        tried = (synthesis_bin,)
-        return (synthesis_bin if synthesis_bin.exists() else None), tried
-    legacy = legacy_synthesis_bin(ws, plugin)
-    tried = (legacy,)
-    return (legacy if legacy.exists() else None), tried
+    candidate = (
+        synthesis_bin
+        if synthesis_bin is not None
+        else legacy_synthesis_bin(ws, plugin)
+    )
+    return (candidate if candidate.exists() else None), (candidate,)
 
 
 class _SynthesisLog:
@@ -298,7 +298,6 @@ class _SynthesisLog:
         self._emit(line)
 
     def summarize(self, returncode: int) -> None:
-        # no file, no summary: the lines were relayed as received
         if self._file is not None:
             logger.info(
                 "synthesis tool exited %d: %d lines in "
@@ -352,7 +351,7 @@ def _run_synthesis(
     except ShellCommandError as exc:
         # an exec failure (e.g. a non-executable binary) counts as the
         # synthesis step failing under R137, not a fatal path
-        # (amendment 3), and is not the fatal path.
+        # (amendment 3).
         detail = str(exc)
         duration = time.monotonic() - start
         return (
