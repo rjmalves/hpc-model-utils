@@ -134,7 +134,7 @@ Expected output:
   `v1-clone-simulprospec`, `v1-clone-evalprospec`, `v1-clone-ranking-utils`,
   `v1-ranking-fetch-inputs`, `v1-clone-upload-cli` and `v1-upload-version`.
 - The nine `PIN` lines: the six `ok` lines of the originals, then
-  `PIN v1.0.1 f61dd5633c12 ok`, `PIN v2.4.5 00305719ee16 ok` and
+  `PIN v1.0.1 f61dd5633c8c ok`, `PIN v2.4.5 00305719ee16 ok` and
   `PIN upload-versao: no SHA pin (v1)`, in the order of the workflow slugs:
 
   ```text
@@ -142,7 +142,7 @@ Expected output:
   PIN v3.0.1 b5f4bbaccc7f ok
   PIN v2.0.2 13f5c0516496 ok
   PIN v2.4.5 00305719ee16 ok
-  PIN v1.0.1 f61dd5633c12 ok
+  PIN v1.0.1 f61dd5633c8c ok
   PIN v2.4.5 00305719ee16 ok
   PIN v2.0.2 13f5c0516496 ok
   PIN v2.4.5 00305719ee16 ok
