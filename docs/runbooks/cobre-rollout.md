@@ -1,6 +1,6 @@
 # Runbook: apply the cobre workflow definitions
 
-This runbook is the ticket-073 apply (ADR-056, ADR-057, ADR-050, ADR-051,
+This runbook is the ticket-073 apply (ADR-058, ADR-057, ADR-050, ADR-051,
 ADR-054, R89 as amended 2026-10-05, R105, R131). It runs after the ticket-067c
 sweep. When it ends, the ModelOps catalog holds the workflow `cobre` and its
 two own Tasks, and the seven shared Tasks accept the model `cobre`.
@@ -254,7 +254,7 @@ failure in the summary. Recover it:
 
 ## Upload Versão cobre option
 
-This section is the ticket-074 apply (ADR-056, R89 as amended 2026-10-05, R105,
+This section is the ticket-074 apply (ADR-058, R89 as amended 2026-10-05, R105,
 R110). It runs after the Cobre apply above has passed. When it ends, Upload
 Versão offers `cobre` among its `modelName` options and clones the
 `upload-versoes-cli` `v1.1.0` release, and the cobre-mpi `v0.17.0` binary sits
@@ -270,17 +270,19 @@ nothing else.
 - The Tasks `v1-clone-upload-cli` and `v1-upload-version` are not edited. The
   pin is the workflow parameter.
 
-What the upload run delivers: the cobre release asset, copied to S3 unchanged
-and uploaded as-is. The CLI selects the extractor by the `.tar.gz` suffix, so
-the archive keeps its release name. It holds `./cobre-mpi` and five other files
-(`README.txt`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and
-`THIRD_PARTY_LICENSES.md`). The processor uploads `cobre-mpi` and skips the
-other five. The plain `cobre` command-line asset is not delivered.
+What the upload run delivers: the `cobre-mpi` binary, zipped alone. The
+ModelOps run form accepts only `.zip`, `.csv`, `.json` and `.txt` for a File
+parameter, so the release archive cannot be picked as it is. The operator zips
+the `cobre-mpi` member of the release archive alone into
+`cobre-mpi-0.17.0.zip`. The zip holds the single member `cobre-mpi`, and the
+processor uploads it as `cobre-mpi`. The plain `cobre` command-line asset and
+the archive's README and licence files are not delivered.
 
 Security note (F12): ModelOps has no RBAC. Adding `cobre` widens which models
 can be published, not who can publish. No compensating control is decided
-here. This section records two sha256 values for the read-back comparison and
-enforces no checksum check; adding one needs an explicit security decision.
+here. This section records the binary's sha256 at each hop (the release
+member, the extracted file, the zip member and the S3 read-back) and enforces
+no checksum check; adding one needs an explicit security decision.
 
 Record evidence only in the `## Upload Versão cobre` section of the private
 rollout-evidence record, never here. `$EV` and `active_executions` are the ones
@@ -389,7 +391,7 @@ Any other result: stop before `--apply`. Nothing was written.
 - **The workflow PUT returns 422:** an Upload Versão execution is active. Wait
   for it to end and run the Preview again.
 
-### Fetch the cobre-mpi asset
+### Build the cobre-mpi zip
 
 On the head node or the workstation, in `<head-scratch>`.
 
@@ -404,35 +406,46 @@ On the head node or the workstation, in `<head-scratch>`.
      | tee members.txt | sed 's|^\./||' | grep -x cobre-mpi
    ```
 
-3. **Record the two hashes**, the archive and the binary inside it:
+3. **Record the archive hash and the binary hash,** and extract the binary:
 
    ```bash
    sha256sum cobre-mpi-0.17.0-x86_64-unknown-linux-gnu.tar.gz
    tar -xzOf cobre-mpi-0.17.0-x86_64-unknown-linux-gnu.tar.gz ./cobre-mpi | sha256sum
+   tar -xzf cobre-mpi-0.17.0-x86_64-unknown-linux-gnu.tar.gz ./cobre-mpi
+   sha256sum cobre-mpi
    ```
 
-4. **Copy the archive,** unchanged and under its release name:
+   The second and fourth commands print the same hash: the binary hash.
+4. **Zip the binary alone** and check the zip:
 
    ```bash
-   aws s3 cp cobre-mpi-0.17.0-x86_64-unknown-linux-gnu.tar.gz \
-     <inputs-uri>/cobre-mpi-0.17.0-x86_64-unknown-linux-gnu.tar.gz
+   zip cobre-mpi-0.17.0.zip cobre-mpi
+   python3 -c 'import sys, zipfile; print(*zipfile.ZipFile(sys.argv[1]).namelist(), sep="\n")' cobre-mpi-0.17.0.zip
+   python3 -c 'import hashlib, sys, zipfile; print(hashlib.sha256(zipfile.ZipFile(sys.argv[1]).read("cobre-mpi")).hexdigest())' cobre-mpi-0.17.0.zip
    ```
 
-Do not unpack and repack the archive, and do not rename it: the CLI selects
-the extractor by the `.tar.gz` suffix.
+   The listing prints exactly `cobre-mpi`, and the member hash equals the
+   binary hash. Without `zip`, `python3 -m zipfile -c cobre-mpi-0.17.0.zip cobre-mpi`
+   builds the same single-member zip. The zip does not keep the executable bit,
+   and that does not matter: `fetch-executables` sets it on every fetched file.
+5. **Copy the zip:**
+
+   ```bash
+   aws s3 cp cobre-mpi-0.17.0.zip <inputs-uri>/cobre-mpi-0.17.0.zip
+   ```
 
 ### Upload run
 
 Run Upload Versão with `modelName` `cobre`, `modelVersion` `v0.17.0` and
-`executablesFile` `<inputs-uri>/cobre-mpi-0.17.0-x86_64-unknown-linux-gnu.tar.gz`.
+`executablesFile` `<inputs-uri>/cobre-mpi-0.17.0.zip`.
 
 ```bash
 L="$EV/cobre/upload/execution-<execution-id>.log"
 jq -r .executionStatus "$EV/cobre/upload/execution-<execution-id>.json"
 grep -nF 'Created temporary dir <root-path>/cobre_' "$L"
 grep -nF 'Using processor for model: cobre' "$L"
+grep -nF 'Found 1 files in ' "$L"
 grep -nF 'Will process: cobre-mpi -> cobre-mpi' "$L"
-grep -nF 'Skipping file (no matching pattern): README.txt' "$L"
 aws s3 ls "s3://<versoes-bucket>/versoes/cobre/v0.17.0/"
 aws s3 cp "s3://<versoes-bucket>/versoes/cobre/v0.17.0/cobre-mpi" - | sha256sum
 ```
@@ -441,21 +454,23 @@ aws s3 cp "s3://<versoes-bucket>/versoes/cobre/v0.17.0/cobre-mpi" - | sha256sum
 
 - status `Success`;
 - the log has `Created temporary dir <root-path>/cobre_`,
-  `Using processor for model: cobre`, `Will process: cobre-mpi -> cobre-mpi`
-  and `Skipping file (no matching pattern): README.txt`;
-- `aws s3 ls s3://<versoes-bucket>/versoes/cobre/v0.17.0/` lists exactly one
-  object, `cobre-mpi`;
+  `Using processor for model: cobre`, `Found 1 files in ` (the extraction
+  directory follows) and `Will process: cobre-mpi -> cobre-mpi`;
+- `aws s3 ls s3://<versoes-bucket>/versoes/cobre/v0.17.0/`
+  lists exactly one object, `cobre-mpi`;
 - `aws s3 cp s3://<versoes-bucket>/versoes/cobre/v0.17.0/cobre-mpi - | sha256sum`
   equals the recorded binary hash.
 
 **If the run fails:**
 
-- **`Unsupported model`, or `must point to a .zip file`:** the clone is not
-  `v1.1.0`. Check the tag and the applied `uploadCliVersion` default, and
-  record the failure.
-- **`must point to a .zip or .tar.gz file`:** the `executablesFile` URI lost the
-  `.tar.gz` suffix. Copy the archive again under its release name, and record
-  the deviation.
+- **`Unsupported model`:** the clone is not `v1.1.0`. Check the tag and the
+  applied `uploadCliVersion` default, and record the failure.
+- **`S3 source URI must point to a .zip or .tar.gz file`:** the `executablesFile`
+  URI lost its `.zip` suffix. Copy the zip again under its name, and record the
+  deviation.
+- **`Downloaded file is not a valid zip archive` or `No files to process`:**
+  rebuild the zip from step 4 of the build, so that its only member is
+  `cobre-mpi` at the top level, copy it again, and record the deviation.
 
 If the run does not meet its pass criterion, run the Rollback below, record the
 failure, and reopen ticket-074 with the evidence.
@@ -499,7 +514,7 @@ values; it does not remove an uploaded binary.
 ## Validation
 
 This section is the ticket-075 validation (ADR-057, ADR-051, ADR-052, ADR-054,
-ADR-056, R73, R105, R118, R135). It runs after the Upload Versão cobre option
+ADR-058, R73, R105, R118, R135). It runs after the Upload Versão cobre option
 above has passed. It proves that cobre `v0.17.0` runs from the ModelOps UI
 through the workflow `cobre`, pinned to `hpc-model-utils` `v2.1.0`, on 1 node
 and on 4 nodes × 100 threads. Both shapes launch `cobre-mpi` through
