@@ -300,6 +300,71 @@ def test_publish_success_fresh_prefix_uploads_in_requirement_order(
     ]
 
 
+def test_publish_synthesis_log_uploads_after_job_logs_before_sintese(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    model_log = _write_log(ws, Phase.MODEL, "111")
+    finalize_log = _write_log(ws, Phase.FINALIZE, "222")
+    state = _state(
+        ws,
+        diagnosis=_success_diagnosis(),
+        jobs=(
+            JobRecord(Phase.MODEL, "111", utc_now_iso(), model_log),
+            JobRecord(Phase.FINALIZE, "222", utc_now_iso(), finalize_log),
+        ),
+    )
+    _write_finalize(ws, state.run_id, _full_realized(ws))
+    _write_sintese(ws)
+    synthesis_log = b"2026-10-04 20:21:31,000 INFO: a\n"
+    ws.synthesis_log_path.write_bytes(synthesis_log)
+
+    store = RecordingObjectStore()
+    reporter = Reporter(_ListChannel(), enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert _upload_keys(store) == [
+        "entradas/eco_deck.zip",
+        "entradas/deck_processado.zip",
+        "saidas/cortes.zip",
+        "saidas/pmo.dat",
+        "saidas/logs/model-111.out",
+        "saidas/logs/finalize-222.out",
+        "saidas/logs/synthesis.out",
+        "sintese/x.parquet",
+        "saidas/status.modelops",
+        "saidas/run.json",
+        "saidas/metadata.modelops",
+    ]
+    assert store.get_bytes(_s3("saidas/logs/synthesis.out")) == synthesis_log
+    run_json = json.loads(store.get_bytes(_s3("saidas/run.json")))
+    entry = next(
+        entry
+        for entry in run_json["artifacts"]
+        if entry["path"] == "saidas/logs/synthesis.out"
+    )
+    assert entry["bytes"] == len(synthesis_log)
+
+
+@pytest.mark.parametrize("as_directory", [False, True], ids=["absent", "dir"])
+def test_publish_synthesis_log_absent_or_not_a_file_uploads_no_synthesis_key(
+    tmp_path: Path, as_directory: bool
+) -> None:
+    ws = _ws(tmp_path)
+    state = _state(ws, diagnosis=_success_diagnosis())
+    _write_finalize(ws, state.run_id, None)
+    if as_directory:
+        ws.synthesis_log_path.mkdir()
+
+    store = RecordingObjectStore()
+    reporter = Reporter(_ListChannel(), enabled=True)
+
+    publish(ws, FakePlugin(), store, reporter, StateStore(ws), _uri())
+
+    assert "saidas/logs/synthesis.out" not in _upload_keys(store)
+
+
 # ---------------------------------------------------------------------------
 # AC3: an upload failure midway on a fresh prefix
 # ---------------------------------------------------------------------------

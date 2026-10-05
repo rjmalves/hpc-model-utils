@@ -7,7 +7,7 @@ IFS= read -r -d '' MODEL <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
 {{modelName}}
 HPCMU_{{CurrentExecution.ExecutionId}}
 MODEL=${MODEL%$'\n'}
-[[ "$MODEL" =~ ^(newave|decomp)$ ]] || fail 'invalid modelName'
+[[ "$MODEL" =~ ^(newave|decomp|cobre)$ ]] || fail 'invalid modelName'
 
 IFS= read -r -d '' ROOT_PATH <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
 {{rootPath}}
@@ -19,7 +19,7 @@ IFS= read -r -d '' WORKDIR <<'HPCMU_{{CurrentExecution.ExecutionId}}' || :
 {{path}}
 HPCMU_{{CurrentExecution.ExecutionId}}
 WORKDIR=${WORKDIR%$'\n'}
-[[ "$WORKDIR" =~ ^/[A-Za-z0-9._/-]+/(newave|decomp)_[A-Za-z0-9]{6}$ ]] || fail 'invalid path'
+[[ "$WORKDIR" =~ ^/[A-Za-z0-9._/-]+/(newave|decomp|cobre)_[A-Za-z0-9]{6}$ ]] || fail 'invalid path'
 [[ "${WORKDIR%/*}" == "${ROOT_PATH%/}" ]] || fail 'invalid path'
 [[ "${WORKDIR##*/}" == "${MODEL}_"* ]] || fail 'invalid path'
 

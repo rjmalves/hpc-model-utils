@@ -1012,7 +1012,7 @@ def test_rank_without_a_shape_value_skips_the_check(
 ) -> None:
     ws = _workspace(tmp_path)
     lines = (
-        (*COBRE_EXECUTION_LINES,)
+        COBRE_EXECUTION_LINES
         if shape is None
         else (shape, *COBRE_EXECUTION_LINES)
     )

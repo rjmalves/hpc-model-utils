@@ -74,6 +74,10 @@ class Workspace:
         return self.hpcmu_dir / "logs"
 
     @property
+    def synthesis_log_path(self) -> Path:
+        return self.logs_dir / "synthesis.out"
+
+    @property
     def outputs_dir(self) -> Path:
         return self.hpcmu_dir / "outputs"
 

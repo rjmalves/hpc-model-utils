@@ -2,16 +2,17 @@
 ``finalize`` job-side step.
 
 ``finalize`` diagnoses the model job, runs postprocess and the
-sintetizador on ``SUCCESS`` only, always realizes outputs, and writes
+synthesis tool (sintetizador for NEWAVE and DECOMP, cobre-bridge for
+cobre) on ``SUCCESS`` only, always realizes outputs, and writes
 ``.hpcmu/finalize.json`` once via ``write_atomic`` -- never
 ``state.json``, which the login side owns (ticket-038 ingests this
 record).
 
-A sintetizador that exits non-zero, or a postprocess step that
+A synthesis tool that exits non-zero, or a postprocess step that
 raises, keeps ``SUCCESS`` but records the failure loudly (R137 /
 ADR-053): the diagnosis reason is prefixed, the first evidence item
 names the failing step, and ``synthesis_status`` reports ``"failed"``.
-Only a *missing* sintetizador binary changes the status, to
+Only a *missing* synthesis tool binary changes the status, to
 ``RUNTIME_ERROR`` / ``core.synthesis_missing`` (R101) -- and only when
 no ``--synthesis-bin`` was given does the legacy workspace path
 apply; an explicit, missing ``--synthesis-bin`` never falls back to
@@ -21,13 +22,14 @@ it.
 from __future__ import annotations
 
 import dataclasses
+import logging
 import os
 import re
 import socket
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, Self, TextIO
 
 from hpc_model_utils.core.diagnosis import (
     Diagnosis,
@@ -53,9 +55,15 @@ from hpc_model_utils.infra.errors import ShellCommandError, UnsafeArchiveError
 from hpc_model_utils.infra.shell import run as shell_run
 from hpc_model_utils.infra.slurm import JobOutcome
 
+logger = logging.getLogger(__name__)
+
 _LSCPU_TIMEOUT = 10.0
 _LSCPU_PAIR_RE = re.compile(r"(\d+),(\d+)")
 _PROCESS_EXIT_RE = re.compile(r"-?[0-9]+")
+_SYNTHESIS_LEVEL_LINE = re.compile(
+    r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} "
+    r"(?:WARNING|ERROR|CRITICAL): .*"
+)
 
 
 class SlurmLike(Protocol):
@@ -209,10 +217,10 @@ def _run_postprocess(
 
 
 def _resolve_synthesis_args(
-    plugin: ModelPlugin, cpus: int
+    plugin: ModelPlugin, ws: Workspace, cpus: int
 ) -> tuple[tuple[str, ...] | None, str | None]:
     try:
-        return plugin.synthesis_args(cpus), None
+        return plugin.synthesis_args(ws, cpus), None
     except Exception as exc:
         # plugin-supplied call, fault-isolated under R137 (recorded as
         # the synthesis step failing); never BaseException.
@@ -225,12 +233,86 @@ def _resolve_synthesis_bin(
     """R101/amendment 3: an explicit ``synthesis_bin`` is used exactly,
     with no legacy fallback. Only its absence lets the legacy
     workspace path apply."""
-    if synthesis_bin is not None:
-        tried = (synthesis_bin,)
-        return (synthesis_bin if synthesis_bin.exists() else None), tried
-    legacy = legacy_synthesis_bin(ws, plugin)
-    tried = (legacy,)
-    return (legacy if legacy.exists() else None), tried
+    candidate = (
+        synthesis_bin
+        if synthesis_bin is not None
+        else legacy_synthesis_bin(ws, plugin)
+    )
+    return (candidate if candidate.exists() else None), (candidate,)
+
+
+class _SynthesisLog:
+    """Writes the synthesis tool's complete merged output to ``path``
+    (published as ``saidas/logs/synthesis.out``) and passes only its
+    WARNING-or-above lines to ``emit``. While the file is unavailable (it
+    could not be opened, or a write failed) every line goes to ``emit``
+    instead, so the log file never changes the synthesis outcome."""
+
+    def __init__(self, path: Path, emit: Callable[[str], None]) -> None:
+        self.lines = 0
+        self.flagged = 0
+        self._path = path
+        self._emit = emit
+        self._file: TextIO | None = None
+        self._broken = False
+
+    def __enter__(self) -> Self:
+        try:
+            # line-buffered, so a failed write surfaces in ``on_line``
+            self._file = self._path.open(
+                "w", encoding="utf-8", errors="replace", buffering=1
+            )
+        except OSError as exc:
+            logger.warning(
+                "synthesis log unavailable (%s); "
+                "relaying synthesis tool output",
+                exc,
+            )
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        if self._file is None:
+            return
+        try:
+            self._file.close()
+        except OSError as exc:
+            if not self._broken:
+                logger.warning("synthesis log close failed (%s)", exc)
+
+    def on_line(self, line: str) -> None:
+        if self._file is not None and not self._broken:
+            try:
+                self._file.write(f"{line}\n")
+            except OSError as exc:
+                self._broken = True
+                logger.warning(
+                    "synthesis log write failed (%s); relaying the remaining "
+                    "synthesis tool output",
+                    exc,
+                )
+            else:
+                self.lines += 1
+                if _SYNTHESIS_LEVEL_LINE.fullmatch(line) is None:
+                    return
+                self.flagged += 1
+        self._emit(line)
+
+    def summarize(self, returncode: int) -> None:
+        if self._file is not None:
+            logger.info(
+                "synthesis tool exited %d: %d lines in "
+                "saidas/logs/synthesis.out, %d at WARNING or above",
+                returncode,
+                self.lines,
+                self.flagged,
+            )
+
+
+def _discard_stale_synthesis_log(ws: Workspace) -> None:
+    try:
+        ws.synthesis_log_path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("stale synthesis log not removed (%s)", exc)
 
 
 def _run_synthesis(
@@ -244,23 +326,32 @@ def _run_synthesis(
     resolved, tried = _resolve_synthesis_bin(ws, plugin, synthesis_bin)
     if resolved is None:
         tried_text = ", ".join(str(path) for path in tried)
+        hint = "; pass --synthesis-bin" if synthesis_bin is None else ""
         return (
             _override_diagnosis(
                 diag,
                 rule_id="core.synthesis_missing",
-                reason=(f"sintetizador binary not found; tried: {tried_text}"),
+                reason=(
+                    f"synthesis tool binary not found; tried: {tried_text}"
+                    f"{hint}"
+                ),
             ),
             None,
         )
     start = time.monotonic()
     try:
-        result = shell_run(
-            [str(resolved), *args], cwd=ws.root, on_line=emit, timeout=None
-        )
+        with _SynthesisLog(ws.synthesis_log_path, emit) as synthesis_log:
+            result = shell_run(
+                [str(resolved), *args],
+                cwd=ws.root,
+                on_line=synthesis_log.on_line,
+                timeout=None,
+                keep_output=False,
+            )
     except ShellCommandError as exc:
         # an exec failure (e.g. a non-executable binary) counts as the
         # synthesis step failing under R137, not a fatal path
-        # (amendment 3), and is not the fatal path.
+        # (amendment 3).
         detail = str(exc)
         duration = time.monotonic() - start
         return (
@@ -268,8 +359,9 @@ def _run_synthesis(
             StepOutcome("synthesis", False, detail, duration),
         )
     duration = time.monotonic() - start
+    synthesis_log.summarize(result.returncode)
     if result.returncode != 0:
-        detail = f"sintetizador exited {result.returncode}"
+        detail = f"synthesis tool exited {result.returncode}"
         return (
             _record_step_failure(diag, "synthesis", detail),
             StepOutcome("synthesis", False, detail, duration),
@@ -337,6 +429,8 @@ def finalize(
     if state is None:
         raise StateFormatError("finalize requires .hpcmu/state.json")
 
+    _discard_stale_synthesis_log(ws)
+
     log_paths: tuple[Path, ...]
     outcome: JobOutcome | None
     if model_job_id is not None:
@@ -362,7 +456,7 @@ def finalize(
     if diag.status is RunStatus.SUCCESS:
         diag, postprocess_outcome = _run_postprocess(plugin, ws, diag)
         cpus = min(cores, physical_cores())
-        args, args_error = _resolve_synthesis_args(plugin, cpus)
+        args, args_error = _resolve_synthesis_args(plugin, ws, cpus)
         if args_error is not None:
             synthesis_outcome = StepOutcome("synthesis", False, args_error, 0.0)
             diag = _record_step_failure(diag, "synthesis", args_error)

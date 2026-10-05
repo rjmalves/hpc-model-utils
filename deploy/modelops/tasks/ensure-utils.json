@@ -1,0 +1,10 @@
+{
+  "taskName": "Garante hpc-model-utils e cobre-bridge versionados",
+  "description": "Instala ou reutiliza as instalacoes imutaveis do hpc-model-utils e do cobre-bridge, uma por commit",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "2.1.0",
+  "hidden": false,
+  "observation": "Instala ou reutiliza as instalacoes imutaveis do hpc-model-utils e do cobre-bridge, uma por commit"
+}

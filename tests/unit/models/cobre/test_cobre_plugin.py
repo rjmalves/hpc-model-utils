@@ -19,12 +19,13 @@ from hpc_model_utils.core.plugin import ExecutableSpec, ParentRun
 from hpc_model_utils.core.state import StudyInfo
 from hpc_model_utils.core.workspace import Workspace
 from hpc_model_utils.models import cobre
-from hpc_model_utils.models.cobre import CobrePlugin, case
+from hpc_model_utils.models.cobre import CobrePlugin, case, outputs
 from hpc_model_utils.models.cobre import plugin as cobre_plugin_module
 from tests.support.cobre_case import (
     case_members,
     cobre_workspace,
     write_elf_stub,
+    write_outputs,
 )
 
 _STUDY = "caso_cobre"
@@ -72,8 +73,14 @@ def test_declarations_package_reexports_only_the_plugin() -> None:
     assert cobre.CobrePlugin is CobrePlugin
 
 
-def test_declarations_synthesis_args_is_none() -> None:
-    assert CobrePlugin().synthesis_args(4) is None
+def test_synthesis_args_returns_the_dashboard_args(tmp_path: Path) -> None:
+    ws = cobre_workspace(tmp_path).ws
+    write_outputs(case.case_root(ws))
+
+    args = CobrePlugin().synthesis_args(ws, 4)
+
+    assert args is not None
+    assert args == outputs.dashboard_args(ws)
 
 
 def test_declarations_abc_defaults_for_unused_hooks(tmp_path: Path) -> None:

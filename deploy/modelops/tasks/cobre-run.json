@@ -1,0 +1,10 @@
+{
+  "taskName": "Executa e acompanha cobre no SLURM",
+  "description": "Executa o cobre através da submissão de jobs ao SLURM e acompanha a execução",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "2.1.0",
+  "hidden": false,
+  "observation": "Executa o cobre através da submissão de jobs ao SLURM e acompanha a execução"
+}

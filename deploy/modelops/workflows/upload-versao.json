@@ -17,7 +17,8 @@
       "order": 0,
       "options": [
         "newave",
-        "decomp"
+        "decomp",
+        "cobre"
       ]
     },
     {
@@ -46,7 +47,7 @@
       "description": "Versão da CLI de upload de versões",
       "name": "uploadCliVersion",
       "type": "String",
-      "defaultValue": "v1.0.0",
+      "defaultValue": "v1.1.0",
       "visible": false,
       "regexPattern": "",
       "format": "",

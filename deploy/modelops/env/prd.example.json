@@ -5,6 +5,7 @@
     "versionsBucket": "example-versions-bucket",
     "rootPath": "/example/root",
     "mpichPath": "/example/mpich",
+    "cobreMpichPath": "/example/cobre-mpich/bin",
     "slurmPath": "/example/slurm",
     "toolsRoot": "/example/tools",
     "uvBin": "/example/bin/uv",
@@ -15,6 +16,7 @@
     "userLocalBin": "/example/local-bin/"
   },
   "workflows": {
+    "cobre": "00000000-0000-0000-0000-000000000109",
     "decomp-pem": "00000000-0000-0000-0000-000000000101",
     "newave-pem": "00000000-0000-0000-0000-000000000102",
     "ranqueamento": "00000000-0000-0000-0000-000000000107",
@@ -23,8 +25,10 @@
   },
   "tasks": {
     "cancel-run": "00000000-0000-0000-0000-000000000201",
+    "cobre-run": "00000000-0000-0000-0000-000000000413",
     "create-workdir": "00000000-0000-0000-0000-000000000402",
     "ensure-tools": "00000000-0000-0000-0000-000000000411",
+    "ensure-utils": "00000000-0000-0000-0000-000000000412",
     "extract-sanitize": "00000000-0000-0000-0000-000000000206",
     "fetch-executables": "00000000-0000-0000-0000-000000000404",
     "fetch-inputs": "00000000-0000-0000-0000-000000000208",

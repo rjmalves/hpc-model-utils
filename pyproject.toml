@@ -1,7 +1,7 @@
 [project]
 name = "hpc-model-utils"
-version = "2.1.0"
-description = "CLI tool for running energy planning models (NEWAVE, DECOMP) in HPC clusters with SLURM and AWS S3 integration"
+version = "2.2.0"
+description = "CLI tool for running energy planning models (NEWAVE, DECOMP, cobre) in HPC clusters with SLURM and AWS S3 integration"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -9,7 +9,7 @@ authors = [
   { name = "Mariana Noel", email = "marianasimoesnoel@gmail.com" },
   { name = "Rogerio Alves", email = "rogerioalves.ee@gmail.com" },
 ]
-keywords = ["hpc", "newave", "decomp", "slurm", "s3", "cli", "energy-models"]
+keywords = ["hpc", "newave", "decomp", "cobre", "slurm", "s3", "cli", "energy-models"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Environment :: Console",

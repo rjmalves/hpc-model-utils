@@ -1,182 +1,149 @@
 # hpc-model-utils
 
-CLI tool for running energy planning models (NEWAVE, DECOMP, DESSEM) in HPC clusters with SLURM job scheduling and AWS S3 integration.
+CLI tool for running energy planning models (NEWAVE, DECOMP, cobre) in HPC clusters with SLURM job scheduling and AWS S3 integration.
 
-## Supported Models
+An external scheduler (ModelOps) drives each execution as a sequence of discrete commands: fetch executables and inputs from S3, preprocess the deck, submit and monitor the SLURM job, diagnose the outcome, postprocess, and upload the results back to S3. Each command reports its result to ModelOps through hook lines on standard output. For the layers, contracts and engine internals, see [docs/architecture.md](docs/architecture.md).
 
-| Model  | Input Parser | Output Diagnosis | Postprocessing     |
-| ------ | ------------ | ---------------- | ------------------ |
-| NEWAVE | inewave      | pmo.dat          | nwlistcf, nwlistop |
-| DECOMP | idecomp      | relato, inviab   | -                  |
-| DESSEM | idessem      | DES_LOG_RELATO   | -                  |
+## Models
 
-## Execution Workflow
+| Model  | Deck format                          | Launcher                                  | Notes |
+| ------ | ------------------------------------ | ----------------------------------------- | ----- |
+| NEWAVE | NEWAVE deck zip (`caso.dat`, `arquivos.dat`) | `mpiexec` (Hydra)                | Runs the sintetizador step and the `nwlistcf`/`nwlistop` postprocessing. |
+| DECOMP | DECOMP deck zip (`dadger`)           | `mpiexec` (Hydra)                         | Runs the sintetizador step. A chained deck whose `FC NEWCUT` names the wrong NEWAVE stage fails in `preprocess` with `DATA_ERROR` (see [the notice](docs/notices/v2-fc-stage-mismatch.md)). |
+| cobre  | Native cobre case zip, with or without a top-level folder | `cobre-mpi` through `srun --mpi=pmix` | `cobre-mpi` is the only supported binary. `run cobre` requires `--max-cores-per-node`. After a successful run with a simulation phase it builds the cobre-bridge dashboard, published as `sintese/dashboard.html`; outside ModelOps, `run cobre` needs `--synthesis-bin <path to cobre-bridge>`, or such a run ends `RUNTIME_ERROR` (`core.synthesis_missing`). |
 
-The CLI orchestrates each model execution as a sequence of discrete steps, designed to be called by an external scheduler (ModelOps):
+cobre is not yet validated on the production cluster.
 
-1. **check-and-fetch-executables** — Download model binaries from S3
-2. **check-and-fetch-inputs** — Download model input deck from S3
-3. **extract-sanitize-inputs** — Unzip and encoding-sanitize inputs
-4. **preprocess** — Model-specific preprocessing (deck patching, parent data extraction)
-5. **run** — Submit job to SLURM and monitor until completion
-6. **generate-execution-status** — Diagnose run outcome (SUCCESS, INFEASIBLE, DATA_ERROR, RUNTIME_ERROR, COMMUNICATION_ERROR, UNKNOWN)
-7. **postprocess** — Model-specific postprocessing (e.g., nwlistcf/nwlistop for NEWAVE)
-8. **output-compression-and-cleanup** — Parallel ZIP compression of outputs
-9. **result-upload** — Upload results to S3
+## Commands
 
-Additional commands: `cancel-run`, `download-executed-run`, `fetch-extract-raw-outputs`, `ingest-offline-run`.
+Every command works in the current directory. Pass the model name (`cobre`, `decomp` or `newave`) as the first argument. Examples use the snake_case canonical names; the kebab-case spelling (for example `check-and-fetch-inputs`) works too.
 
-## Offline Run Ingestion
+### Workflow commands
 
-A run executed **offline** (outside the cluster) can be pushed through the same
-postprocessing pipeline as a regular execution. The user uploads their run
-artifacts as three separate ZIP archives — inputs, outputs, and Benders cuts —
-and `ingest-offline-run` receives them as **three explicit S3 object keys**
-(one per archive). The archives may arrive under arbitrary names, so ingestion
-never relies on archive names: the tool downloads all three, extracts them
-together into the working directory, and processes them as a single batch,
-regardless of which file was placed in which archive. The raw input-deck echo
-(`eco_deck.zip`) is then rebuilt from the deck contents (identified by reading
-`caso.dat`/`arquivos.dat`), exactly like a cluster run.
+In workflow order:
 
-This replaces steps 2–5 (fetch inputs → extract → preprocess → run) with a
-single ingest step. Executables are still fetched (NEWAVE postprocessing runs
-the `nwlistcf`/`nwlistop` binaries), and the model job itself is skipped:
+| Command | Purpose | Example |
+| ------- | ------- | ------- |
+| `check_and_fetch_executables` | Download the model binaries from S3 and check them. | `hpc-model-utils check_and_fetch_executables newave s3://<bucket>/<executables-prefix>/` |
+| `check_and_fetch_inputs` | Download the input deck from S3. Options: `--parent-path TEXT` (parent execution for a chained run), `--delete`. | `hpc-model-utils check_and_fetch_inputs decomp s3://<bucket>/<inputs-prefix>/` |
+| `extract_sanitize_inputs` | Unzip the deck and sanitize its encoding. | `hpc-model-utils extract_sanitize_inputs newave` |
+| `preprocess` | Model-specific deck preparation. Option: `--execution-name TEXT`. | `hpc-model-utils preprocess newave --execution-name <name>` |
+| `run` | Submit the job to SLURM and monitor it until completion. Takes `QUEUE` and `CORES`. Options: `--max-cores-per-node`, `--max-job-time-hours`, `--mpich-path`, `--slurm-path`, `--skip`, `--synthesis-bin`. | `hpc-model-utils run cobre <queue> 128 --max-cores-per-node 32` |
+| `ingest_offline_run` | NEWAVE only. Ingest a run executed outside the cluster from three S3 object keys (inputs, outputs, cuts). `run` then skips the model job. | `hpc-model-utils ingest_offline_run newave s3://<bucket>/<inputs>.zip s3://<bucket>/<outputs>.zip s3://<bucket>/<cuts>.zip` |
+| `result_upload` | Upload the results to S3. | `hpc-model-utils result_upload newave s3://<bucket>/<results-prefix>/` |
+| `cancel_run` | Cancel the SLURM job of the run. Options: `--job-id TEXT`, `--slurm-path`. | `hpc-model-utils cancel_run newave` |
 
-1. **check-and-fetch-executables** — Download model binaries from S3
-2. **ingest-offline-run** — Fetch the three uploaded ZIPs (by object key),
-   extract them together, sanitize encoding, point the process manager at the
-   executables directory, record study metadata, and tag the run as offline
-3. **run** — Submit only the post job (status → postprocess → compression).
-   `run` detects the offline tag recorded in step 2 and skips model execution
-   automatically, so the external scheduler drives an offline run with the same
-   `run` invocation as a cluster run — no `--skip` flag required.
-4. **result-upload** — Upload results to S3
+### Toolbox commands
 
-Offline runs are tagged with an `execution_source = OFFLINE` metadata flag and a
-ModelOps annotation, so they stay distinguishable from cluster executions. The
-same flag is what `run` reads to skip the model job; the `--skip` flag remains
-available as an explicit override for other scenarios. Currently only NEWAVE
-implements offline ingestion; other models inherit a default that raises
-`NotImplementedError`.
+| Command | Purpose | Example |
+| ------- | ------- | ------- |
+| `generate_execution_status` | Diagnose the run outcome and report one status token. Option: `--job-id TEXT`. | `hpc-model-utils generate_execution_status newave` |
+| `postprocess` | Run the model-specific postprocessing (for example `nwlistcf`/`nwlistop` for NEWAVE). | `hpc-model-utils postprocess newave` |
 
-```bash
-# Ingest an offline NEWAVE run from three explicit S3 object keys
-# (inputs, outputs, Benders cuts)
-hpc-model-utils ingest_offline_run NEWAVE \
-  s3://bucket/ingest/offline-case-001/inputs.zip \
-  s3://bucket/ingest/offline-case-001/outputs.zip \
-  s3://bucket/ingest/offline-case-001/cortes.zip
+### Hidden command
 
-# Then run and upload, exactly like a cluster run. The model job is skipped
-# automatically because the run was tagged offline during ingestion.
-hpc-model-utils run NEWAVE normal 64
-hpc-model-utils result_upload NEWAVE s3://bucket/executions/offline-case-001/
-```
+`finalize` is a hidden job-side command: the generated SLURM job script calls it to diagnose, postprocess and record the outcome when the job ends. It does not appear in `--help`, and operators do not call it.
+
+## Run status
+
+Every diagnosis yields one of nine status tokens. The ModelOps hook method follows the token:
+
+| Status | ModelOps hook |
+| ------ | ------------- |
+| `SUCCESS` | `SetSuccess` |
+| `INFEASIBLE` | `SetModelError` |
+| `DATA_ERROR` | `SetDataError` |
+| `RUNTIME_ERROR` | `SetRuntimeError` |
+| `TIMEOUT` | `SetRuntimeError` |
+| `INFRA_ERROR` | `SetRuntimeError` |
+| `LICENSE_ERROR` | `SetRuntimeError` |
+| `CANCELLED` | `SetRuntimeError` |
+| `UNKNOWN` | `SetRuntimeError` |
+
+The full v1-to-v2 comparison, with the checklist for consumers of these statuses, is in [docs/notices/v2-status-semantics.md](docs/notices/v2-status-semantics.md). The DECOMP stage-mismatch data error is in [docs/notices/v2-fc-stage-mismatch.md](docs/notices/v2-fc-stage-mismatch.md).
+
+## Exit codes
+
+| Code | Meaning |
+| ---- | ------- |
+| `0` | Success. |
+| `2` | Usage error: an invalid argument or option. |
+| `3` | Scheduler error: a SLURM command failed. |
+| `4` | Storage error: an S3 operation failed. |
+| `5` | Data error: the deck or the outputs are invalid. |
+| `99` | Internal error. |
+
+A command that a signal ends exits with 128 plus the signal number. An expected failure prints one line to standard error.
+
+## Logs and artifacts
+
+- `saidas/logs/<phase>-<jobid>.out`: the log of each SLURM job.
+- `saidas/logs/synthesis.out`: the output of the synthesis step (sintetizador for NEWAVE and DECOMP, cobre-bridge for cobre).
+- `sintese/dashboard.html`: the cobre results dashboard, one HTML file that loads plotly.js from `cdn.plot.ly` when opened, so viewing it needs internet access.
+- `saidas/run.json`: the run record, with the status, the reason and the rule that produced it.
+
+`run` relays the lines of the child processes to ModelOps verbatim. cobre publishes `saidas/training.zip`, `saidas/policy.zip` and `saidas/simulation.zip`, plus the raw `saidas/training/metadata.json` and `saidas/simulation/metadata.json`.
 
 ## Installation
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
+On a cluster, the workflows install the tool through `deploy/modelops/scripts/ensure-tools.sh`. It installs each tool once, into `<root>/<tool>/<sha40>/`, pinned by release tag plus the 40-hex commit SHA, with `uv sync --frozen --no-dev`. Installed directories are immutable.
+
+For a manual install, check out a release tag and sync the locked environment:
+
 ```bash
 git clone https://github.com/rjmalves/hpc-model-utils.git
 cd hpc-model-utils
-./setup.sh
-```
-
-The setup script creates a virtual environment, installs dependencies, and symlinks the `hpc-model-utils` command to `~/.local/bin/`.
-
-To force-recreate the environment:
-
-```bash
-./setup.sh --force
-```
-
-### Manual Installation
-
-```bash
-uv sync
+git checkout v<X.Y.Z>
+uv sync --frozen --no-dev
 uv run hpc-model-utils --version
 ```
 
-Or with pip:
+## Workflows as code
+
+The ModelOps Task and Workflow definitions live in [deploy/modelops/](deploy/modelops/README.md), with placeholders for every environment-specific value. Apply them with:
 
 ```bash
-pip install .
-hpc-model-utils --version
+# Read the live definitions into a directory.
+uv run python -m deploy.modelops.apply snapshot --out <dir>
+
+# Dry run: print what would change.
+uv run python -m deploy.modelops.apply sync --env-file <env-file>
+
+# Write the changes after a typed confirmation.
+uv run python -m deploy.modelops.apply sync --env-file <env-file> --apply
 ```
 
-## Usage
-
-```bash
-# Show available commands
-hpc-model-utils --help
-
-# Show version
-hpc-model-utils --version
-
-# Example: fetch inputs from S3
-hpc-model-utils check-and-fetch-inputs \
-  --model-name NEWAVE \
-  --s3-inputs-path s3://bucket/inputs/case-001/ \
-  --target-dir /scratch/case-001/
-
-# Example: submit a SLURM job
-hpc-model-utils run \
-  --model-name NEWAVE \
-  --target-dir /scratch/case-001/ \
-  --queue normal \
-  --core-count 64
-
-# Example: diagnose execution status
-hpc-model-utils generate-execution-status \
-  --model-name NEWAVE \
-  --target-dir /scratch/case-001/
-```
-
-### Exit Codes
-
-| Code | Meaning          |
-| ---- | ---------------- |
-| 0    | Success          |
-| 1    | Model error      |
-| 2    | Validation error |
-| 3    | SLURM error      |
-| 4    | S3 error         |
-| 99   | Unknown error    |
+Operator runbooks, with placeholders, are in [docs/runbooks/](docs/runbooks/).
 
 ## Development
 
 ```bash
-# Install with dev dependencies
-uv sync --dev
-
-# Run unit tests
-uv run pytest tests/ -m "not integration"
-
-# Run with coverage
-uv run pytest tests/ -m "not integration" --cov=app --cov-report=html
-
-# Type checking
-uv run mypy ./app
-
-# Linting
-uv run ruff check ./app
+uv sync --frozen --dev
+uv run ruff check src tests deploy
+uv run mypy --strict src/hpc_model_utils
+uv run mypy --strict deploy
+uv run pytest tests/ -m "not integration" --cov=hpc_model_utils --cov-branch --cov-report=xml
 ```
 
-### Integration Tests (LocalStack)
-
-Integration tests use [LocalStack](https://localstack.cloud/) for S3 operations without AWS credentials.
+Integration tests use [LocalStack](https://localstack.cloud/) for S3, so they need no AWS credentials:
 
 ```bash
-# Start LocalStack
-docker compose -f docker-compose.localstack.yml up -d
+docker run -d \
+  --name localstack \
+  -p 4566:4566 \
+  -e SERVICES=s3 \
+  -e DEBUG=0 \
+  localstack/localstack:3.8
 
-# Run integration tests
-uv run pytest tests/integration/ -v -m integration
+AWS_ENDPOINT_URL=http://localhost:4566 \
+AWS_ACCESS_KEY_ID=test \
+AWS_SECRET_ACCESS_KEY=test \
+AWS_DEFAULT_REGION=us-east-1 \
+uv run pytest tests/integration/ -v -m integration --cov=hpc_model_utils --cov-branch --cov-report=xml --cov-append
 
-# Stop LocalStack
-docker compose -f docker-compose.localstack.yml down
+docker rm -f localstack
 ```
 
 ## License

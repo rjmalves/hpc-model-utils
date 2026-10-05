@@ -73,7 +73,9 @@ class FakePlugin(ModelPlugin):
             raw=(RawFile(Selector(names=("fake.out",))),),
         )
 
-    def synthesis_args(self, cpus: int) -> tuple[str, ...] | None:
+    def synthesis_args(
+        self, ws: Workspace, cpus: int
+    ) -> tuple[str, ...] | None:
         return ("completa", "--processadores", str(cpus))
 
 

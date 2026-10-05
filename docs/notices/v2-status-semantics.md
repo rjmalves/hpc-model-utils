@@ -79,10 +79,9 @@ section "Intended differences", for the full list; the headline changes are:
 
 ## Coming later
 
-The DECOMP FC stage-mismatch check is currently a warning only, appended to
-the annotation. Its promotion to a `DATA_ERROR` outcome is **not** part of
-the v2.0.x releases; it ships in a later change and will be announced in its
-own, separate notice.
+The promotion of the DECOMP FC stage-mismatch check from a warning to a
+`DATA_ERROR` outcome ships in hpc-model-utils v2.2.0 and is announced in its
+own notice, [`v2-fc-stage-mismatch.md`](v2-fc-stage-mismatch.md).
 
 ## Checklist for encadeador developers
 
@@ -103,7 +102,12 @@ Before the switch date, check each point against encadeador's code:
    `INFRA_ERROR:`, `LICENSE_ERROR:` or `CANCELLED:` annotation. In v1 they
    depended on whatever the partial outputs looked like.
 4. **Annotation text.** If encadeador reads or displays the run's annotation,
-   expect the `<STATUS>: <reason> [<rule_id>]` form.
+   expect the `<STATUS>: <reason> [<rule_id>]` form. From 2.2.0 the reason of
+   a failed or missing synthesis step names the tool neutrally
+   (`synthesis failed: synthesis tool exited <n>`,
+   `synthesis tool binary not found; tried: …`) for NEWAVE, DECOMP and
+   cobre; match on the `synthesis failed:` prefix, the rule id or
+   `synthesis_status`, never on the tool name.
 5. **Artifacts.** If encadeador reads any file from a run's artifacts other
    than `saidas/metadata.modelops`, check it against "Artifact changes" above.
 6. **Not yet exercised on prd.** The INFEASIBLE → flexibilization → next-run

@@ -183,8 +183,8 @@ def _assert_fail_closed(plugin: ModelPlugin, ws: Workspace) -> None:
         assert root_str not in item.detail, item.detail
 
 
-def _assert_synthesis_args_shape(plugin: ModelPlugin) -> None:
-    args = plugin.synthesis_args(4)
+def _assert_synthesis_args_shape(plugin: ModelPlugin, ws: Workspace) -> None:
+    args = plugin.synthesis_args(ws, 4)
     assert args is None or (args and all(args))
 
 
@@ -390,8 +390,8 @@ def test_plugin_conformance_fail_closed_on_deck_only_workspace(
 def test_plugin_conformance_synthesis_args_none_or_nonempty_strings(
     plugin_case: tuple[ModelPlugin, Workspace],
 ) -> None:
-    plugin, _ = plugin_case
-    _assert_synthesis_args_shape(plugin)
+    plugin, ws = plugin_case
+    _assert_synthesis_args_shape(plugin, ws)
 
 
 def test_plugin_conformance_launch_returns_launch_spec(

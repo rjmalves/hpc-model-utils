@@ -2,7 +2,7 @@
 
 Acceptance criteria, selected with ``-k <keyword>``:
 ``pass_case``, ``lost`` / ``duplicated``, ``anomaly`` / ``ambiguous``,
-``two_jobs``.
+``two_jobs``; ticket-079a adds the ``verbatim`` export tests.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from deploy.modelops.check_relay import (
     ambiguous_marker,
@@ -276,6 +276,169 @@ def test_check_relay_two_jobs_in_order_passes_reversed_fails(
     assert "relay: FAIL" in reversed_result.output
 
 
+# --------------------------------------------------- AC: verbatim export (079a)
+
+_VERBATIM_PREFIX = (
+    "2026-10-05T12:00:00.000Z [ExecutionOutput] "
+    "Executa e acompanha modelo no SLURM: "
+)
+_FINALIZE_LOG_BYTES = (
+    b"HPCMU_START job=8\n"
+    b"2026-10-04 20:21:31,000 INFO: sintese ${HOME}\n"
+    b"sintetizador exited 0\n"
+)
+
+
+def _verbatim_export(relayed: list[str]) -> list[str]:
+    body = [
+        "Submitted batch job 7",
+        'Parâmetro dinâmico do tipo "String" atualizado: {{jobId}} Valor: "7"',
+        "Submitted batch job 8",
+        'Parâmetro dinâmico do tipo "String" atualizado: {{jobId}} Valor: "8"',
+        *relayed,
+        '${CurrentExecution.SetMetadata("duration_seconds.run", "12")}',
+        '${CurrentExecution.SetMetadata("job_ids", "7,8")}',
+        "2026-10-05 12:00:00,000 INFO hpc_model_utils.core.lifecycle.run: "
+        "run finished: SUCCESS [x]",
+        "",
+    ]
+    return [_VERBATIM_PREFIX + line for line in body]
+
+
+def _verbatim_logs(tmp_path: Path) -> tuple[Path, Path, list[str]]:
+    model_log = tmp_path / "model-7.out"
+    finalize_log = tmp_path / "finalize-8.out"
+    model_log.write_bytes(_JOB_LOG_BYTES)
+    finalize_log.write_bytes(_FINALIZE_LOG_BYTES)
+    relayed = [
+        neutralize(line)
+        for path in (model_log, finalize_log)
+        for line in _raw_job_lines(path)
+    ]
+    return model_log, finalize_log, relayed
+
+
+def _invoke_verbatim(
+    tmp_path: Path, model_log: Path, finalize_log: Path, export: list[str]
+) -> Result:
+    relayed_path = tmp_path / "relayed.txt"
+    _write_relayed(relayed_path, export)
+    return CliRunner().invoke(
+        main,
+        [
+            "--relayed",
+            str(relayed_path),
+            "--job-log",
+            str(model_log),
+            "--job-log",
+            str(finalize_log),
+        ],
+    )
+
+
+def test_check_relay_verbatim_pass_case_exits_zero(tmp_path: Path) -> None:
+    model_log, finalize_log, relayed = _verbatim_logs(tmp_path)
+    heartbeat = "[hpcmu] heartbeat: job 7 RUNNING None"
+    export = _verbatim_export([relayed[0], heartbeat, *relayed[1:]])
+
+    result = _invoke_verbatim(tmp_path, model_log, finalize_log, export)
+
+    assert result.exit_code == 0, result.output
+    assert "relay: PASS" in result.output
+    assert f"expected={len(relayed)} relayed={len(relayed)}" in result.output
+    assert "informational=1" in result.output
+    assert "anomalies=0" in result.output
+
+
+def test_check_relay_verbatim_lost_line_fails(tmp_path: Path) -> None:
+    model_log, finalize_log, relayed = _verbatim_logs(tmp_path)
+    export = _verbatim_export(relayed[:1] + relayed[2:])
+
+    result = _invoke_verbatim(tmp_path, model_log, finalize_log, export)
+
+    assert result.exit_code == 1, result.output
+    assert "relay: FAIL" in result.output
+    assert "index=1" in result.output
+    assert "kind=lost" in result.output
+
+
+def test_check_relay_verbatim_duplicated_line_fails(tmp_path: Path) -> None:
+    model_log, finalize_log, relayed = _verbatim_logs(tmp_path)
+    export = _verbatim_export(relayed[:2] + relayed[1:])
+
+    result = _invoke_verbatim(tmp_path, model_log, finalize_log, export)
+
+    assert result.exit_code == 1, result.output
+    assert "index=2" in result.output
+    assert "kind=extra" in result.output
+
+
+def test_check_relay_verbatim_log_never_appeared_marker_is_an_anomaly(
+    tmp_path: Path,
+) -> None:
+    model_log, finalize_log, relayed = _verbatim_logs(tmp_path)
+    marker = "[hpcmu] log never appeared: model-1.out"
+    export = _verbatim_export([*relayed, marker])
+
+    result = _invoke_verbatim(tmp_path, model_log, finalize_log, export)
+
+    assert result.exit_code == 1, result.output
+    assert "relay: FAIL" in result.output
+    assert "anomalies=1" in result.output
+    assert f"anomalies:\n  {marker}" in result.output
+
+
+def test_check_relay_verbatim_login_side_line_in_window_is_extra(
+    tmp_path: Path,
+) -> None:
+    model_log, finalize_log, relayed = _verbatim_logs(tmp_path)
+    traceback_line = (
+        "2026-10-05 12:00:00,000 ERROR hpc_model_utils.cli.root: "
+        "unhandled exception in run"
+    )
+    export = _verbatim_export([*relayed, traceback_line])
+
+    result = _invoke_verbatim(tmp_path, model_log, finalize_log, export)
+
+    assert result.exit_code == 1, result.output
+    assert f"index={len(relayed)} kind=extra" in result.output
+    assert "unhandled exception in run" in result.output
+
+
+def test_check_relay_verbatim_without_submitted_batch_job_is_usage_error(
+    tmp_path: Path,
+) -> None:
+    model_log, finalize_log, relayed = _verbatim_logs(tmp_path)
+    export = [_VERBATIM_PREFIX + line for line in relayed]
+
+    result = _invoke_verbatim(tmp_path, model_log, finalize_log, export)
+
+    assert result.exit_code == 2, result.output
+    assert result.stderr.startswith("check_relay: no 'Submitted batch job'")
+
+
+def test_check_relay_verbatim_ambiguous_marker_in_job_log_fails(
+    tmp_path: Path,
+) -> None:
+    model_log = tmp_path / "model-7.out"
+    finalize_log = tmp_path / "finalize-8.out"
+    model_log.write_bytes(b"[hpcmu] not really a cli marker\nsecond line\n")
+    finalize_log.write_bytes(_FINALIZE_LOG_BYTES)
+    relayed = [
+        neutralize(line)
+        for path in (model_log, finalize_log)
+        for line in _raw_job_lines(path)
+    ]
+
+    result = _invoke_verbatim(
+        tmp_path, model_log, finalize_log, _verbatim_export(relayed)
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "relay: FAIL" in result.output
+    assert "reason: ambiguous marker in job log" in result.output
+
+
 # ----------------------------------------------------------- usage errors (exit 2)
 
 
@@ -386,6 +549,48 @@ def test_relayed_lines_classifies_informational_and_anomaly_markers(
     assert result.lines == ["real output"]
     assert result.informational == 4
     assert len(result.anomalies) == 4
+
+
+def test_relayed_lines_verbatim_window_bounds_and_parameter_lines(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "relayed.txt"
+    _write_relayed(
+        path,
+        _verbatim_export(["first", "[hpcmu] heartbeat: job 7 RUNNING None"]),
+    )
+
+    result = relayed_lines(path)
+
+    assert result.lines == ["first"]
+    assert result.informational == 1
+    assert result.anomalies == []
+
+
+def test_relayed_lines_verbatim_takes_the_last_submitted_batch_job(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "relayed.txt"
+    path.write_text(
+        "Submitted batch job 7\nbefore\nSubmitted batch job 8\nafter\n",
+        encoding="utf-8",
+    )
+
+    assert relayed_lines(path).lines == ["after"]
+
+
+def test_relayed_lines_prefixed_marker_wins_over_verbatim_reading(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "relayed.txt"
+    path.write_text(
+        "Submitted batch job 7\n"
+        "t INFO hpc_model_utils.job: relayed\n"
+        "bare line\n",
+        encoding="utf-8",
+    )
+
+    assert relayed_lines(path).lines == ["relayed"]
 
 
 # --------------------------------------------------------------- unit: compare

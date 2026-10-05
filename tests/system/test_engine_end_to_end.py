@@ -584,7 +584,7 @@ def test_run_scenario_i_synthesis_failure_keeps_success(
     assert (
         annotations[0]
         .args[0]
-        .startswith("SUCCESS: synthesis failed: sintetizador exited 2; ")
+        .startswith("SUCCESS: synthesis failed: synthesis tool exited 2; ")
     )
     assert ("SetMetadata", ("synthesis_status", "failed")) in {
         (h.method, h.args) for h in hooks

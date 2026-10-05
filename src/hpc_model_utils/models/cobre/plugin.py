@@ -6,9 +6,10 @@ The deck concerns (case detection, study info, input files) live in
 solver facts are verified in the model job (tickets 069 and 070).
 ``launch``, ``diagnose`` and ``outputs`` delegate to the sibling
 ``launch``, ``diagnosis`` and ``outputs`` modules (tickets 069/070/071).
-``prepare``, ``postprocess`` (no synthesis, R78), ``fetch_parent`` and
-``ingest_offline`` keep the ABC defaults. The plugin is registered in
-``models.PLUGINS`` (ticket-072).
+``synthesis_args`` delegates to ``outputs.dashboard_args``, the
+cobre-bridge dashboard (ADR-059, ticket-080c). ``prepare``,
+``postprocess``, ``fetch_parent`` and ``ingest_offline`` keep the ABC
+defaults. The plugin is registered in ``models.PLUGINS`` (ticket-072).
 """
 
 from __future__ import annotations
@@ -62,6 +63,11 @@ class CobrePlugin(ModelPlugin):
 
     def outputs(self, ws: Workspace) -> OutputPlan:
         return outputs.output_plan(ws)
+
+    def synthesis_args(
+        self, ws: Workspace, cpus: int
+    ) -> tuple[str, ...] | None:
+        return outputs.dashboard_args(ws)
 
     def check_executables(self, ws: Workspace) -> None:
         mpi = ws.assets / "cobre-mpi"

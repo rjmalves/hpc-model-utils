@@ -24,7 +24,12 @@ from typing import TextIO
 import click
 
 from hpc_model_utils.core.diagnosis import RunStatus
-from hpc_model_utils.core.errors import ExitCode, Failure, classify
+from hpc_model_utils.core.errors import (
+    ExitCode,
+    Failure,
+    HpcmuError,
+    classify,
+)
 from hpc_model_utils.core.settings import EngineSettings
 from hpc_model_utils.platform.modelops import Reporter
 from hpc_model_utils.platform.stdio import StdioChannels, install, write_fatal
@@ -167,6 +172,9 @@ class _PipeAwareStreamHandler(logging.StreamHandler[TextIO]):
         super().handleError(record)
 
 
+_VERBATIM_LOGGERS = ("hpc_model_utils.job", "hpc_model_utils.finalize")
+
+
 def configure_logging() -> None:
     handler = _PipeAwareStreamHandler(sys.stdout)
     handler.setFormatter(
@@ -175,6 +183,15 @@ def configure_logging() -> None:
     app_logger = logging.getLogger("hpc_model_utils")
     app_logger.setLevel(os.environ.get("LOGLEVEL", "INFO"))
     app_logger.addHandler(handler)
+    # Child-process and relayed lines carry their own timestamps: written
+    # as received, once, and never filtered by LOGLEVEL (ADR-046).
+    verbatim = _PipeAwareStreamHandler(sys.stdout)
+    verbatim.setFormatter(logging.Formatter("%(message)s"))
+    for name in _VERBATIM_LOGGERS:
+        child_output = logging.getLogger(name)
+        child_output.setLevel(logging.INFO)
+        child_output.propagate = False
+        child_output.addHandler(verbatim)
     # logging.captureWarnings(True) (set by stdio.install()) attaches a
     # NullHandler to "py.warnings" on first use, which silently drops
     # every captured warning: "py.warnings" is not an ancestor of
@@ -209,6 +226,12 @@ def _map_failure(exc: Exception) -> Failure:
     return classify(exc)
 
 
+def _is_expected(exc: Exception) -> bool:
+    return isinstance(
+        exc, (HpcmuError, click.ClickException, click.exceptions.Abort)
+    )
+
+
 def _emits_terminal_status(command_name: str) -> bool:
     cmd = cli.commands.get(command_name)
     if isinstance(cmd, HpcmuCommand):
@@ -241,7 +264,14 @@ def _fatal_path(
             logger.exception("reporter.terminal() failed in the fatal path")
 
     try:
-        logger.error("unhandled exception in %s", command_label, exc_info=exc)
+        if _is_expected(exc):
+            logger.error(
+                "%s failed: %s: %s", command_label, failure.category, message
+            )
+        else:
+            logger.error(
+                "unhandled exception in %s", command_label, exc_info=exc
+            )
     except Exception:
         pass
 

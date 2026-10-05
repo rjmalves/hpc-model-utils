@@ -543,7 +543,6 @@ def test_decompplugin_prepare_no_fc_registers_deletes_cuts_and_warns_unused(
     assert len(warnings) == 1
     assert "unused" in warnings[0]
     assert _couplings(caplog) == []
-    assert cuts.stage_warning(ws) is None
     assert _sha(ws) == before
 
 
@@ -601,7 +600,7 @@ def test_expected_cut_file_fixture_2025_parent_equals_fc_newcut(
     assert cuts.expected_cut_file(dadger, parent_start) == newcut
 
 
-def test_decompplugin_prepare_2024_parent_warns_stage_mismatch_and_returns(
+def test_decompplugin_prepare_2024_parent_stage_mismatch_raises_data_error(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     parent_files = _parent_payloads(_HEADER, _CUTS)
@@ -611,14 +610,19 @@ def test_decompplugin_prepare_2024_parent_warns_stage_mismatch_and_returns(
     before = _sha(ws)
 
     with caplog.at_level(logging.INFO):
-        DecompPlugin().prepare(ws, "x")
+        with pytest.raises(
+            DataError,
+            match=(
+                r"FC stage mismatch: NEWCUT cortes-012\.dat, "
+                r"expected cortes-024\.dat"
+            ),
+        ) as excinfo:
+            DecompPlugin().prepare(ws, "x")
 
-    assert _warnings(caplog) == [_MISMATCH_2024]
-    assert _couplings(caplog) == [
-        cuts.CutCoupling(_HEADER, _CUTS, "parent", "cortes-024.dat")
-    ]
+    assert str(excinfo.value) == f"dadger.rv0: {_MISMATCH_2024}"
+    assert _warnings(caplog) == []
+    assert _couplings(caplog) == []
     _assert_files(ws, parent_files)
-    assert cuts.stage_warning(ws) == _MISMATCH_2024
     assert _sha(ws) == before
 
 
@@ -779,59 +783,6 @@ def test_couple_non_stage_newcut_skips_stage_check(
     assert _sha(ws) == before
 
 
-# -- stage_warning ------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class _StageWarningRow:
-    case: str
-    state: Literal["none", "no-parent", "parent"]
-    parent_start: str
-    dadger: Callable[[], bytes] | None
-    expected: str | None
-
-
-_STAGE_WARNING_ROWS: tuple[_StageWarningRow, ...] = (
-    _StageWarningRow("no-state", "none", _START_2024, None, None),
-    _StageWarningRow("no-parent", "no-parent", _START_2024, None, None),
-    _StageWarningRow(
-        "no-fc",
-        "parent",
-        _START_2024,
-        lambda: _fc_variant(newv21=None, newcut=None),
-        None,
-    ),
-    _StageWarningRow(
-        "non-stage-newcut",
-        "parent",
-        _START_2024,
-        lambda: _fc_variant(newcut="cortes.dat"),
-        None,
-    ),
-    _StageWarningRow("incomputable", "parent", "garbage", None, None),
-    _StageWarningRow("match", "parent", _START_2025, None, None),
-    _StageWarningRow("mismatch", "parent", _START_2024, None, _MISMATCH_2024),
-)
-
-
-@pytest.mark.parametrize(
-    "row", _STAGE_WARNING_ROWS, ids=[row.case for row in _STAGE_WARNING_ROWS]
-)
-def test_stage_warning_recomputed_from_inputs_returns_expected(
-    tmp_path: Path, row: _StageWarningRow
-) -> None:
-    ws = _workspace(
-        tmp_path, dadger=None if row.dadger is None else row.dadger()
-    )
-    if row.state != "none":
-        parent = None if row.state == "no-parent" else _parent(row.parent_start)
-        _save_state(ws, parent)
-    before = _sha(ws)
-
-    assert cuts.stage_warning(ws) == row.expected
-    assert _sha(ws) == before
-
-
 # -- AC5: no-parent deck coupling ----------------------------------------------
 
 
@@ -862,7 +813,6 @@ def test_decompplugin_prepare_no_parent_keeps_fc_files_and_prunes_others(
     assert _couplings(caplog) == [
         cuts.CutCoupling(_HEADER, _CUTS, "deck", None)
     ]
-    assert cuts.stage_warning(ws) is None
     assert _sha(ws) == before
 
 
