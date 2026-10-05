@@ -535,6 +535,59 @@ def test_fatal_path_scrubs_url_query_from_annotation_and_fatal_line(
     assert "?" not in captured.err
 
 
+def test_fatal_path_typed_error_logs_one_line_without_traceback(
+    _restore_root_loggers: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    configure_logging()
+    app_ctx, _ = _make_app_context()
+    app_ctx.command_name = "fetch_things"
+
+    exit_code = _fatal_path(
+        DataError("missing input"), app_ctx, emits_terminal_status=True
+    )
+
+    (line,) = capsys.readouterr().out.splitlines()
+    assert line.endswith(
+        " ERROR hpc_model_utils.cli.root: "
+        "fetch_things failed: DataError: missing input"
+    )
+    assert exit_code == ExitCode.DATA
+
+
+def test_fatal_path_click_usage_error_logs_one_line_without_traceback(
+    _restore_root_loggers: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    configure_logging()
+    app_ctx, _ = _make_app_context()
+    app_ctx.command_name = "fetch_things"
+
+    _fatal_path(
+        click.UsageError("bad option"), app_ctx, emits_terminal_status=True
+    )
+
+    (line,) = capsys.readouterr().out.splitlines()
+    assert "failed: UsageError: bad option" in line
+    assert "Traceback" not in line
+
+
+def test_fatal_path_unexpected_error_keeps_traceback_in_log(
+    _restore_root_loggers: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    configure_logging()
+    app_ctx, _ = _make_app_context()
+    app_ctx.command_name = "crash_demo"
+
+    try:
+        raise RuntimeError("boom")
+    except RuntimeError as exc:
+        exit_code = _fatal_path(exc, app_ctx, emits_terminal_status=True)
+
+    out = capsys.readouterr().out
+    assert "unhandled exception in crash_demo" in out
+    assert "Traceback (most recent call last):" in out
+    assert exit_code == ExitCode.INTERNAL
+
+
 _UNRESOLVED_COMMAND_SCRIPT = (
     "from hpc_model_utils.cli.root import main\n"
     "raise SystemExit(main(['no-such-command']))\n"

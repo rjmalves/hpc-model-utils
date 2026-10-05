@@ -24,7 +24,12 @@ from typing import TextIO
 import click
 
 from hpc_model_utils.core.diagnosis import RunStatus
-from hpc_model_utils.core.errors import ExitCode, Failure, classify
+from hpc_model_utils.core.errors import (
+    ExitCode,
+    Failure,
+    HpcmuError,
+    classify,
+)
 from hpc_model_utils.core.settings import EngineSettings
 from hpc_model_utils.platform.modelops import Reporter
 from hpc_model_utils.platform.stdio import StdioChannels, install, write_fatal
@@ -221,6 +226,12 @@ def _map_failure(exc: Exception) -> Failure:
     return classify(exc)
 
 
+def _is_expected(exc: Exception) -> bool:
+    return isinstance(
+        exc, (HpcmuError, click.ClickException, click.exceptions.Abort)
+    )
+
+
 def _emits_terminal_status(command_name: str) -> bool:
     cmd = cli.commands.get(command_name)
     if isinstance(cmd, HpcmuCommand):
@@ -253,7 +264,14 @@ def _fatal_path(
             logger.exception("reporter.terminal() failed in the fatal path")
 
     try:
-        logger.error("unhandled exception in %s", command_label, exc_info=exc)
+        if _is_expected(exc):
+            logger.error(
+                "%s failed: %s: %s", command_label, failure.category, message
+            )
+        else:
+            logger.error(
+                "unhandled exception in %s", command_label, exc_info=exc
+            )
     except Exception:
         pass
 
