@@ -1,1 +1,0 @@
-echo Created temporary dir $(mktemp -d -p '{{rootPath}}' -t '{{modelName}}_XXXXXX')

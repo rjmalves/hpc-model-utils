@@ -91,7 +91,7 @@
     {
       "workflowTaskId": "3af8b15c-bccf-4031-a866-232417da90ba",
       "alias": null,
-      "taskId": "@@task:v1-create-workdir@@",
+      "taskId": "@@task:create-workdir@@",
       "executionCriteria": "",
       "onFailure": 1
     },
@@ -112,7 +112,7 @@
     {
       "workflowTaskId": "ef6153e2-7c9e-46b3-bb20-5cd2d664859f",
       "alias": null,
-      "taskId": "@@task:v1-remove-workdir@@",
+      "taskId": "@@task:remove-workdir@@",
       "executionCriteria": "",
       "onFailure": 1
     }
@@ -121,7 +121,7 @@
     {
       "workflowTaskId": "544e60b4-f9b3-44c0-837d-a1dc7d498f81",
       "alias": null,
-      "taskId": "@@task:v1-remove-workdir@@",
+      "taskId": "@@task:remove-workdir@@",
       "executionCriteria": ""
     }
   ],

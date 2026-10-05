@@ -32,7 +32,7 @@
       "description": "Versao do sintetizador-newave a ser utilizada",
       "name": "synthesisAppVersion",
       "type": "String",
-      "defaultValue": "v2.3.0",
+      "defaultValue": "v2.4.5",
       "visible": false,
       "regexPattern": "",
       "format": "",
@@ -248,33 +248,70 @@
       "description": "Versão do ranqueamento-prospectivo-utils",
       "name": "rankingAppVersion",
       "type": "String",
-      "defaultValue": "main",
+      "defaultValue": "v1.1.0",
       "visible": false,
       "regexPattern": "",
       "format": "",
       "order": 21,
       "options": []
+    },
+    {
+      "description": "Commit do hpc-model-utils fixado junto com a versao",
+      "name": "utilsAppSha",
+      "type": "String",
+      "defaultValue": "f61dd5633c8c2fd339bf51300cf7ca692407ac8c",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 22,
+      "options": []
+    },
+    {
+      "description": "Commit do sintetizador-newave fixado junto com a versao",
+      "name": "synthesisAppSha",
+      "type": "String",
+      "defaultValue": "00305719ee16d92d02d645364bf054e7c9cb673d",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 23,
+      "options": []
+    },
+    {
+      "description": "Diretorio versionado do hpc-model-utils, capturado do ensure-tools",
+      "name": "utilsToolDir",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "HPCMU_TOOL hpc-model-utils (/\\S+)",
+      "format": "{1}",
+      "order": 24,
+      "options": []
+    },
+    {
+      "description": "Diretorio versionado do sintetizador-newave, capturado do ensure-tools",
+      "name": "synthesisToolDir",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "HPCMU_TOOL sintetizador-newave (/\\S+)",
+      "format": "{1}",
+      "order": 25,
+      "options": []
     }
   ],
   "workflowTasks": [
     {
+      "workflowTaskId": "d7fb060f-0195-4a4c-a6b8-3fb1d414090b",
+      "alias": null,
+      "taskId": "@@task:ensure-tools@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    },
+    {
       "workflowTaskId": "bb1fe491-c0cc-421c-a745-fb06d22c22f7",
       "alias": null,
-      "taskId": "@@task:v1-create-workdir@@",
-      "executionCriteria": null,
-      "onFailure": 1
-    },
-    {
-      "workflowTaskId": "2672778b-c593-4391-8319-ff0d6ae351cd",
-      "alias": null,
-      "taskId": "@@task:v1-clone-hpc-model-utils@@",
-      "executionCriteria": null,
-      "onFailure": 1
-    },
-    {
-      "workflowTaskId": "aa89be2b-e5d9-4475-a59d-72c3adeec8a9",
-      "alias": null,
-      "taskId": "@@task:v1-clone-sintetizador-newave@@",
+      "taskId": "@@task:create-workdir@@",
       "executionCriteria": null,
       "onFailure": 1
     },
@@ -302,7 +339,7 @@
     {
       "workflowTaskId": "50abf2db-d264-4862-8402-029834b371b3",
       "alias": null,
-      "taskId": "@@task:v1-fetch-executables@@",
+      "taskId": "@@task:fetch-executables@@",
       "executionCriteria": null,
       "onFailure": 1
     },
@@ -323,7 +360,7 @@
     {
       "workflowTaskId": "bdf750d6-447a-4cd4-92fb-49d16ff5783c",
       "alias": null,
-      "taskId": "@@task:v1-remove-workdir@@",
+      "taskId": "@@task:remove-workdir@@",
       "executionCriteria": null,
       "onFailure": 1
     }
@@ -332,7 +369,7 @@
     {
       "workflowTaskId": "71f60a91-1f00-4534-af4b-d44b46139ad4",
       "alias": null,
-      "taskId": "@@task:v1-remove-workdir@@",
+      "taskId": "@@task:remove-workdir@@",
       "executionCriteria": null
     }
   ],
@@ -365,7 +402,7 @@
       "type": "endNode"
     },
     {
-      "workflowTaskId": "bb1fe491-c0cc-421c-a745-fb06d22c22f7",
+      "workflowTaskId": "d7fb060f-0195-4a4c-a6b8-3fb1d414090b",
       "measured": {
         "height": 182,
         "width": 288
@@ -377,7 +414,7 @@
       "type": "taskNode"
     },
     {
-      "workflowTaskId": "2672778b-c593-4391-8319-ff0d6ae351cd",
+      "workflowTaskId": "bb1fe491-c0cc-421c-a745-fb06d22c22f7",
       "measured": {
         "height": 182,
         "width": 288
@@ -385,18 +422,6 @@
       "position": {
         "x": 36,
         "y": 499
-      },
-      "type": "taskNode"
-    },
-    {
-      "workflowTaskId": "aa89be2b-e5d9-4475-a59d-72c3adeec8a9",
-      "measured": {
-        "height": 182,
-        "width": 288
-      },
-      "position": {
-        "x": 29.36575400156667,
-        "y": 767.0959382992488
       },
       "type": "taskNode"
     },
@@ -527,21 +552,16 @@
     {
       "criteriaExpression": "true",
       "sourceWorkflowTaskId": null,
+      "targetWorkflowTaskId": "d7fb060f-0195-4a4c-a6b8-3fb1d414090b"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "d7fb060f-0195-4a4c-a6b8-3fb1d414090b",
       "targetWorkflowTaskId": "bb1fe491-c0cc-421c-a745-fb06d22c22f7"
     },
     {
       "criteriaExpression": "true",
       "sourceWorkflowTaskId": "bb1fe491-c0cc-421c-a745-fb06d22c22f7",
-      "targetWorkflowTaskId": "2672778b-c593-4391-8319-ff0d6ae351cd"
-    },
-    {
-      "criteriaExpression": "true",
-      "sourceWorkflowTaskId": "2672778b-c593-4391-8319-ff0d6ae351cd",
-      "targetWorkflowTaskId": "aa89be2b-e5d9-4475-a59d-72c3adeec8a9"
-    },
-    {
-      "criteriaExpression": "true",
-      "sourceWorkflowTaskId": "aa89be2b-e5d9-4475-a59d-72c3adeec8a9",
       "targetWorkflowTaskId": "abfdcd47-72c9-4dfc-bef4-42284853c4f3"
     },
     {

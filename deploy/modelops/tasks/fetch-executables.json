@@ -1,5 +1,5 @@
 {
-  "taskName": "Obtem executaveis dos modelos do S3 (NEWAVE/DECOMP)",
+  "taskName": "Obtem executaveis dos modelos do S3",
   "description": "Obtem executaveis dos modelos do S3",
   "scriptType": "BASH",
   "tags": [],

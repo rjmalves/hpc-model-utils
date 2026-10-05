@@ -448,15 +448,15 @@ def test_lint_v1_baseline_is_not_checked(tasks: Path) -> None:
     for path in tasks.glob("*.sh"):
         if path.stem not in (
             "extract-sanitize",
-            "v1-fetch-executables",
-            "v1-remove-workdir",
+            "v1-clone-simulprospec",
+            "v1-upload-version",
         ):
             path.unlink()
 
     require(check_scripts(tasks))
     assert lint_script(
-        "v1-fetch-executables",
-        (tasks / "v1-fetch-executables.sh").read_text("utf-8"),
+        "v1-clone-simulprospec",
+        (tasks / "v1-clone-simulprospec.sh").read_text("utf-8"),
     )
 
 
@@ -865,7 +865,7 @@ def test_scripts_pass_bash_syntax_check(slug: str) -> None:
 
 TASK_DOCUMENTS: dict[str, dict[str, Any]] = {
     "create-workdir": {
-        "taskName": "Cria diretorio temporario para execucao (NEWAVE/DECOMP)",
+        "taskName": "Cria diretorio temporario para execucao",
         "description": "Cria diretorio temporario para execucao de modelo",
         "scriptType": "BASH",
         "tags": [],
@@ -875,7 +875,7 @@ TASK_DOCUMENTS: dict[str, dict[str, Any]] = {
         "observation": "Cria diretório temporário para execução de modelo",
     },
     "fetch-executables": {
-        "taskName": "Obtem executaveis dos modelos do S3 (NEWAVE/DECOMP)",
+        "taskName": "Obtem executaveis dos modelos do S3",
         "description": "Obtem executaveis dos modelos do S3",
         "scriptType": "BASH",
         "tags": [],
@@ -935,7 +935,7 @@ TASK_DOCUMENTS: dict[str, dict[str, Any]] = {
         "observation": "Upload das saidas do modelo para o S3",
     },
     "remove-workdir": {
-        "taskName": "Remove diretorio temporario da execucao (NEWAVE/DECOMP)",
+        "taskName": "Remove diretorio temporario da execucao",
         "description": "Remove diretorio temporario da execucao",
         "scriptType": "BASH",
         "tags": [],
