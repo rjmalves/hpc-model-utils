@@ -139,12 +139,8 @@ def render_run_json(record: Mapping[str, object]) -> str:
 
 def read_previous_run_id(data: bytes) -> str | None:
     try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
+        parsed = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
         return None
     if not isinstance(parsed, dict):
         return None

@@ -633,9 +633,7 @@ def _decode_step_outcome(value: Mapping[str, object], path: str) -> StepOutcome:
 
 
 def _realized_outputs_to_dict(outputs: RealizedOutputs) -> dict[str, object]:
-    """``core/outputs.py`` is out of scope for this ticket, so
-    ``RealizedOutputs`` is encoded/decoded here rather than gaining its
-    own ``to_dict``/``from_dict`` pair."""
+    """Encode ``RealizedOutputs``, which has no ``to_dict``/``from_dict`` of its own."""
     return {
         "deck": outputs.deck,
         "archives": list(outputs.archives),
