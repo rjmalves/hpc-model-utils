@@ -1,0 +1,596 @@
+{
+  "workflowName": "Ranqueamento Prospectivo",
+  "workflowDescription": "Ranqueamento",
+  "version": "0.0.1",
+  "cancelationCriteria": "",
+  "sshConnectionId": "@@env:sshConnectionId@@",
+  "timeout": 0,
+  "parameters": [
+    {
+      "description": "Nome do NEWAVE",
+      "name": "modelName",
+      "type": "String",
+      "defaultValue": "newave",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 0,
+      "options": []
+    },
+    {
+      "description": "Versao do hpc-model-utils a ser utilizada",
+      "name": "utilsAppVersion",
+      "type": "String",
+      "defaultValue": "v1.0.1",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 1,
+      "options": []
+    },
+    {
+      "description": "Versao do sintetizador-newave a ser utilizada",
+      "name": "synthesisAppVersion",
+      "type": "String",
+      "defaultValue": "v2.3.0",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 2,
+      "options": []
+    },
+    {
+      "description": "AWS KEY ID",
+      "name": "awsKeyId",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 3,
+      "options": []
+    },
+    {
+      "description": "AWS SECRET KEY",
+      "name": "awsSecretKey",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 4,
+      "options": []
+    },
+    {
+      "description": "AWS DEFAULT REGION",
+      "name": "awsRegion",
+      "type": "String",
+      "defaultValue": "@@env:awsRegion@@",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 5,
+      "options": []
+    },
+    {
+      "description": "Bucket do S3 com os dados de saídas do NEWAVE",
+      "name": "outputsBucket",
+      "type": "String",
+      "defaultValue": "@@env:outputsBucket@@",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 6,
+      "options": []
+    },
+    {
+      "description": "Caminho de instalacao dos binarios do MPICH",
+      "name": "mpichPath",
+      "type": "String",
+      "defaultValue": "@@env:mpichPath@@",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 7,
+      "options": []
+    },
+    {
+      "description": "Caminho de instalacao dos binarios do SLURM",
+      "name": "slurmPath",
+      "type": "String",
+      "defaultValue": "@@env:slurmPath@@",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 8,
+      "options": []
+    },
+    {
+      "description": "Caminho para criação de diretorios temporarios",
+      "name": "rootPath",
+      "type": "String",
+      "defaultValue": "@@env:rootPath@@",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 9,
+      "options": []
+    },
+    {
+      "description": "Arquivo de entrada para a execucao",
+      "name": "inputFile",
+      "type": "File",
+      "defaultValue": "",
+      "visible": true,
+      "regexPattern": "",
+      "format": "",
+      "order": 10,
+      "options": []
+    },
+    {
+      "description": "Caminho do caso cuja política deve ser usada",
+      "name": "parentPath",
+      "type": "String",
+      "defaultValue": "''",
+      "visible": true,
+      "regexPattern": "",
+      "format": "",
+      "order": 11,
+      "options": []
+    },
+    {
+      "description": "Numero de cores",
+      "name": "coreCount",
+      "type": "Int",
+      "defaultValue": "64",
+      "visible": true,
+      "regexPattern": "",
+      "format": "",
+      "order": 12,
+      "options": []
+    },
+    {
+      "description": "Nome da fila do SLURM",
+      "name": "queue",
+      "type": "List",
+      "defaultValue": "@@env:queueNewave@@",
+      "visible": true,
+      "regexPattern": "",
+      "format": "",
+      "order": 13,
+      "options": [
+        "@@env:queueNewave@@",
+        "@@env:queueDecomp@@"
+      ]
+    },
+    {
+      "description": "Versao do NEWAVE a ser utilizada",
+      "name": "modelVersion",
+      "type": "List",
+      "defaultValue": "31.0.2_centOS",
+      "visible": true,
+      "regexPattern": "",
+      "format": "",
+      "order": 14,
+      "options": [
+        "30.0.4",
+        "31_centos",
+        "31.0.2_centOS"
+      ]
+    },
+    {
+      "description": "Caminho utilizado para a execucao",
+      "name": "path",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "(?<=Created temporary dir\\s)(/[^ ]+)",
+      "format": "{0}",
+      "order": 15,
+      "options": []
+    },
+    {
+      "description": "ID do job atribuido pelo SLURM",
+      "name": "jobId",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "Submitted batch job (\\d+)",
+      "format": "{1}",
+      "order": 16,
+      "options": []
+    },
+    {
+      "description": "Bucket com as versoes dos executaveis para serem utilizados",
+      "name": "versionsBucket",
+      "type": "String",
+      "defaultValue": "@@env:versionsBucket@@",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 17,
+      "options": []
+    },
+    {
+      "description": "Timeout para a execucao do modelo em horas",
+      "name": "jobTimeoutHours",
+      "type": "Int",
+      "defaultValue": "1",
+      "visible": true,
+      "regexPattern": "",
+      "format": "",
+      "order": 18,
+      "options": []
+    },
+    {
+      "description": "Versão do simulprospec",
+      "name": "simulprospecAppVersion",
+      "type": "String",
+      "defaultValue": "master",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 19,
+      "options": []
+    },
+    {
+      "description": "Versão do evalprospec",
+      "name": "evalprospecAppVersion",
+      "type": "String",
+      "defaultValue": "master",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 20,
+      "options": []
+    },
+    {
+      "description": "Versão do ranqueamento-prospectivo-utils",
+      "name": "rankingAppVersion",
+      "type": "String",
+      "defaultValue": "main",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 21,
+      "options": []
+    }
+  ],
+  "workflowTasks": [
+    {
+      "workflowTaskId": "bb1fe491-c0cc-421c-a745-fb06d22c22f7",
+      "alias": null,
+      "taskId": "@@task:v1-create-workdir@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "2672778b-c593-4391-8319-ff0d6ae351cd",
+      "alias": null,
+      "taskId": "@@task:v1-clone-hpc-model-utils@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "aa89be2b-e5d9-4475-a59d-72c3adeec8a9",
+      "alias": null,
+      "taskId": "@@task:v1-clone-sintetizador-newave@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "abfdcd47-72c9-4dfc-bef4-42284853c4f3",
+      "alias": null,
+      "taskId": "@@task:v1-clone-simulprospec@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "f911e86d-2f21-4e18-a761-1e34897d0789",
+      "alias": null,
+      "taskId": "@@task:v1-clone-evalprospec@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "5e3662eb-13e4-4953-8bf8-f3376ad539ae",
+      "alias": null,
+      "taskId": "@@task:v1-clone-ranking-utils@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "50abf2db-d264-4862-8402-029834b371b3",
+      "alias": null,
+      "taskId": "@@task:v1-fetch-executables@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "0c32ee5d-8b64-4894-a690-bcdc9c92e1dc",
+      "alias": null,
+      "taskId": "@@task:v1-ranking-fetch-inputs@@",
+      "executionCriteria": "",
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "44055993-904f-44bc-a47e-7fb45f92c7f1",
+      "alias": null,
+      "taskId": "@@task:v1-ranking-run@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "bdf750d6-447a-4cd4-92fb-49d16ff5783c",
+      "alias": null,
+      "taskId": "@@task:v1-remove-workdir@@",
+      "executionCriteria": null,
+      "onFailure": 1
+    }
+  ],
+  "cancelationTasks": [
+    {
+      "workflowTaskId": "71f60a91-1f00-4534-af4b-d44b46139ad4",
+      "alias": null,
+      "taskId": "@@task:v1-remove-workdir@@",
+      "executionCriteria": null
+    }
+  ],
+  "tags": [],
+  "observation": "Ranqueamento",
+  "isSchedulesActive": false,
+  "workflowTaskMetadata": [
+    {
+      "workflowTaskId": "startNode",
+      "measured": {
+        "height": 36,
+        "width": 288
+      },
+      "position": {
+        "x": 50,
+        "y": 150
+      },
+      "type": "startNode"
+    },
+    {
+      "workflowTaskId": "endNode",
+      "measured": {
+        "height": 36,
+        "width": 288
+      },
+      "position": {
+        "x": 571.629797565527,
+        "y": 1655.6873297948466
+      },
+      "type": "endNode"
+    },
+    {
+      "workflowTaskId": "bb1fe491-c0cc-421c-a745-fb06d22c22f7",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 45,
+        "y": 241
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "2672778b-c593-4391-8319-ff0d6ae351cd",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 36,
+        "y": 499
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "aa89be2b-e5d9-4475-a59d-72c3adeec8a9",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 29.36575400156667,
+        "y": 767.0959382992488
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "abfdcd47-72c9-4dfc-bef4-42284853c4f3",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 9.294020459073977,
+        "y": 1028.9939574432008
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "f911e86d-2f21-4e18-a761-1e34897d0789",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 27.753796171604797,
+        "y": 1287.64299127317
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "5e3662eb-13e4-4953-8bf8-f3376ad539ae",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 44.6921793393164,
+        "y": 1560.3469394501042
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "50abf2db-d264-4862-8402-029834b371b3",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 550.8824084347498,
+        "y": 591.4075003722696
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "0c32ee5d-8b64-4894-a690-bcdc9c92e1dc",
+      "measured": {
+        "height": 182,
+        "width": 313
+      },
+      "position": {
+        "x": 550.0989785047344,
+        "y": 875.3496243261114
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "44055993-904f-44bc-a47e-7fb45f92c7f1",
+      "measured": {
+        "height": 182,
+        "width": 310
+      },
+      "position": {
+        "x": 544.0351660565253,
+        "y": 1151.7526938099204
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "bdf750d6-447a-4cd4-92fb-49d16ff5783c",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 569.0110181979871,
+        "y": 1404.277054512969
+      },
+      "type": "taskNode"
+    }
+  ],
+  "cancellationTaskMetadata": [
+    {
+      "workflowTaskId": "startNode",
+      "measured": {
+        "height": 36,
+        "width": 288
+      },
+      "position": {
+        "x": 50,
+        "y": 150
+      },
+      "type": "startNode"
+    },
+    {
+      "workflowTaskId": "endNode",
+      "measured": {
+        "height": 36,
+        "width": 288
+      },
+      "position": {
+        "x": 257,
+        "y": 597.7248344421387
+      },
+      "type": "endNode"
+    },
+    {
+      "workflowTaskId": "71f60a91-1f00-4534-af4b-d44b46139ad4",
+      "measured": {
+        "height": 152,
+        "width": 288
+      },
+      "position": {
+        "x": 367.99999237060547,
+        "y": 296.99998474121094
+      },
+      "type": "taskNode"
+    }
+  ],
+  "taskExecutionCriterias": [
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": null,
+      "targetWorkflowTaskId": "bb1fe491-c0cc-421c-a745-fb06d22c22f7"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "bb1fe491-c0cc-421c-a745-fb06d22c22f7",
+      "targetWorkflowTaskId": "2672778b-c593-4391-8319-ff0d6ae351cd"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "2672778b-c593-4391-8319-ff0d6ae351cd",
+      "targetWorkflowTaskId": "aa89be2b-e5d9-4475-a59d-72c3adeec8a9"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "aa89be2b-e5d9-4475-a59d-72c3adeec8a9",
+      "targetWorkflowTaskId": "abfdcd47-72c9-4dfc-bef4-42284853c4f3"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "abfdcd47-72c9-4dfc-bef4-42284853c4f3",
+      "targetWorkflowTaskId": "f911e86d-2f21-4e18-a761-1e34897d0789"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "f911e86d-2f21-4e18-a761-1e34897d0789",
+      "targetWorkflowTaskId": "5e3662eb-13e4-4953-8bf8-f3376ad539ae"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "5e3662eb-13e4-4953-8bf8-f3376ad539ae",
+      "targetWorkflowTaskId": "50abf2db-d264-4862-8402-029834b371b3"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "50abf2db-d264-4862-8402-029834b371b3",
+      "targetWorkflowTaskId": "0c32ee5d-8b64-4894-a690-bcdc9c92e1dc"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "0c32ee5d-8b64-4894-a690-bcdc9c92e1dc",
+      "targetWorkflowTaskId": "44055993-904f-44bc-a47e-7fb45f92c7f1"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "44055993-904f-44bc-a47e-7fb45f92c7f1",
+      "targetWorkflowTaskId": "bdf750d6-447a-4cd4-92fb-49d16ff5783c"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "bdf750d6-447a-4cd4-92fb-49d16ff5783c",
+      "targetWorkflowTaskId": null
+    }
+  ],
+  "cancellationTaskExecutionCriterias": [
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": null,
+      "targetWorkflowTaskId": "71f60a91-1f00-4534-af4b-d44b46139ad4"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "71f60a91-1f00-4534-af4b-d44b46139ad4",
+      "targetWorkflowTaskId": null
+    }
+  ],
+  "schedules": []
+}

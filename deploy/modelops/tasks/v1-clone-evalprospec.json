@@ -1,0 +1,10 @@
+{
+  "taskName": "Clona evalprospec",
+  "description": "Clona repositorio evalprospec e instala em ambiente virtual",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "0.0.1",
+  "hidden": false,
+  "observation": "Clona repositorio evalprospec e instala em ambiente virtual"
+}

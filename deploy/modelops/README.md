@@ -10,7 +10,7 @@ files, and the real values live only in an uncommitted environment file
 
 | Path | Content |
 | --- | --- |
-| `workflows/<slug>.json` | One Workflow document: `newave-pem`, `decomp-pem`, `upload-newave` |
+| `workflows/<slug>.json` | One Workflow document: `newave-pem`, `decomp-pem`, `upload-newave`, `ranqueamento`, `upload-versao` |
 | `tasks/<slug>.json` | One Task document without its `script` |
 | `tasks/<slug>.sh` | The Task's script, verbatim, LF line endings |
 | `env/prd.example.json` | The environment file shape, dummy values only |
@@ -48,10 +48,11 @@ The apply script takes the real file through its required `--env-file` option.
 }
 ```
 
-`protectedTaskIds` lists every live Task `_id` the repository must not write,
-including Tasks of Workflows this tree does not manage: the apply refuses a
-change to a listed Task. The seven ids the ticket-067 switch overwrote in
-place (`cancel-run`, `extract-sanitize`, `fetch-inputs`, `ingest-offline`,
+Every prd Workflow is now a managed definition. `protectedTaskIds` lists the
+live Task `_id`s that no definition may write: the apply refuses a change to a
+listed Task. They are the legacy `v1-` documents and the documents no Workflow
+references any more. The seven ids the ticket-067 switch overwrote in place
+(`cancel-run`, `extract-sanitize`, `fetch-inputs`, `ingest-offline`,
 `preprocess`, `result-upload`, `run`) left the list, because those documents
 now hold the v2 content under their original names (R89 as amended
 2026-10-05).
@@ -66,11 +67,17 @@ CI secret scan.
 ## The `v1-` baseline
 
 The `v1-` prefix marks a legacy Task exported verbatim. It is protected, never
-written, and exempt from the idiom lint. The five that remain
+written, and exempt from the idiom lint. The five shared ones
 (`v1-create-workdir`, `v1-remove-workdir`, `v1-fetch-executables`,
 `v1-clone-hpc-model-utils`, `v1-clone-sintetizador-newave`) are still
 referenced by Ranqueamento Prospectivo and Upload Versão, so the dry run keeps
 proving that they have not drifted. They are retired at ticket-067c.
+
+The own Tasks of Ranqueamento Prospectivo (`v1-clone-simulprospec`,
+`v1-clone-evalprospec`, `v1-clone-ranking-utils`, `v1-ranking-fetch-inputs`,
+`v1-ranking-run`) and of Upload Versão (`v1-clone-upload-cli`,
+`v1-upload-version`) are legacy `v1-` documents too. Nothing writes them
+until ticket-067c, which changes `v1-ranking-run` alone.
 
 ## Operator entry point
 

@@ -1,0 +1,10 @@
+{
+  "taskName": "Upload de nova versão de modelo",
+  "description": "Faz upload de nova versão de modelo a partir de zip",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "0.0.1",
+  "hidden": false,
+  "observation": "Faz upload de nova versão de modelo a partir de zip"
+}

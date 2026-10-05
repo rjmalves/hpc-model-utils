@@ -1,11 +1,11 @@
 """AM-001b/ADR-007 contracts between deploy/modelops and the platform encoder.
 
-Three contracts: every parameter name a definition (or an unexported live
-workflow) declares is a ``PLATFORM_IDENTIFIERS`` member; every ``{{x}}`` in a
-Task script resolves; every RegexPattern parameter is covered by the
-``TRIGGER_PATTERNS`` neutralizer. Each ``check_*`` function takes the
-``deploy/modelops`` directory so a mutated ``tmp_path`` copy is checked the
-same way as the real tree. Messages name files and parameters, never values.
+Three contracts: every parameter name a definition declares is a
+``PLATFORM_IDENTIFIERS`` member; every ``{{x}}`` in a Task script resolves;
+every RegexPattern parameter is covered by the ``TRIGGER_PATTERNS``
+neutralizer. Each ``check_*`` function takes the ``deploy/modelops`` directory
+so a mutated ``tmp_path`` copy is checked the same way as the real tree.
+Messages name files and parameters, never values.
 """
 
 from __future__ import annotations
@@ -28,11 +28,6 @@ from hpc_model_utils.platform.modelops import HookMethod
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODELOPS = REPO_ROOT / "deploy" / "modelops"
-EXTERNAL_PARAMETERS = (
-    Path(__file__).resolve().parent
-    / "fixtures"
-    / "external_workflow_parameters.json"
-)
 
 _IDENTIFIER_SYNTAX = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _RESERVED = frozenset(
@@ -79,17 +74,10 @@ def _parameters(root: Path) -> list[tuple[str, dict[str, Any]]]:
     return found
 
 
-def check_identifiers(
-    root: Path, external: Path = EXTERNAL_PARAMETERS
-) -> list[str]:
-    declared = [(where, param["name"]) for where, param in _parameters(root)]
-    declared += [
-        (f"{external.name}[{workflow}]", name)
-        for workflow, names in _load(external).items()
-        for name in names
-    ]
+def check_identifiers(root: Path) -> list[str]:
     errors: list[str] = []
-    for where, name in declared:
+    for where, param in _parameters(root):
+        name = param["name"]
         if name not in PLATFORM_IDENTIFIERS:
             errors.append(
                 f"{where}: parameter {name} is not in PLATFORM_IDENTIFIERS"
@@ -200,24 +188,15 @@ def test_check_identifiers_bad_parameter_name_is_reported(
         require(check_identifiers(tree))
 
 
-def test_check_identifiers_unknown_external_name_is_reported(
+def test_check_identifiers_covers_the_managed_ranking_workflow(
     tree: Path,
 ) -> None:
-    external = tree / "external.json"
-    external.write_text('{"Upload Versao": ["Path2x"]}', encoding="utf-8")
+    _declare(tree, "workflows/ranqueamento.json", {"name": "Path2x"})
 
     with pytest.raises(
-        AssertionError,
-        match=r"external.json\[Upload Versao\]: parameter Path2x",
+        AssertionError, match=r"workflows/ranqueamento.json: parameter Path2x"
     ):
-        require(check_identifiers(tree, external))
-
-
-def test_external_fixture_names_both_unexported_workflows() -> None:
-    assert set(_load(EXTERNAL_PARAMETERS)) == {
-        "Ranqueamento Prospectivo",
-        "Upload Versão",
-    }
+        require(check_identifiers(tree))
 
 
 def test_check_references_real_tree_reports_nothing() -> None:

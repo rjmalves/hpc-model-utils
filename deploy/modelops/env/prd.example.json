@@ -11,12 +11,15 @@
     "awsRegion": "example-region",
     "queueNewave": "example-queue-newave",
     "queueDecomp": "example-queue-decomp",
-    "queueTest": "example-queue-test"
+    "queueTest": "example-queue-test",
+    "userLocalBin": "/example/local-bin/"
   },
   "workflows": {
     "decomp-pem": "00000000-0000-0000-0000-000000000101",
     "newave-pem": "00000000-0000-0000-0000-000000000102",
-    "upload-newave": "00000000-0000-0000-0000-000000000103"
+    "ranqueamento": "00000000-0000-0000-0000-000000000107",
+    "upload-newave": "00000000-0000-0000-0000-000000000103",
+    "upload-versao": "00000000-0000-0000-0000-000000000108"
   },
   "tasks": {
     "cancel-run": "00000000-0000-0000-0000-000000000201",
@@ -30,11 +33,18 @@
     "remove-workdir": "00000000-0000-0000-0000-000000000408",
     "result-upload": "00000000-0000-0000-0000-000000000213",
     "run": "00000000-0000-0000-0000-000000000214",
+    "v1-clone-evalprospec": "00000000-0000-0000-0000-000000000302",
     "v1-clone-hpc-model-utils": "00000000-0000-0000-0000-000000000202",
+    "v1-clone-ranking-utils": "00000000-0000-0000-0000-000000000303",
+    "v1-clone-simulprospec": "00000000-0000-0000-0000-000000000301",
     "v1-clone-sintetizador-newave": "00000000-0000-0000-0000-000000000204",
+    "v1-clone-upload-cli": "00000000-0000-0000-0000-000000000306",
     "v1-create-workdir": "00000000-0000-0000-0000-000000000205",
     "v1-fetch-executables": "00000000-0000-0000-0000-000000000207",
-    "v1-remove-workdir": "00000000-0000-0000-0000-000000000212"
+    "v1-ranking-fetch-inputs": "00000000-0000-0000-0000-000000000304",
+    "v1-ranking-run": "00000000-0000-0000-0000-000000000305",
+    "v1-remove-workdir": "00000000-0000-0000-0000-000000000212",
+    "v1-upload-version": "00000000-0000-0000-0000-000000000307"
   },
   "protectedTaskIds": [
     "00000000-0000-0000-0000-000000000202",

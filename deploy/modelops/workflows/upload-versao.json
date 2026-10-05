@@ -1,0 +1,283 @@
+{
+  "workflowName": "Upload Versão",
+  "workflowDescription": "Realiza upload de uma versão de modelo para ser utilizada",
+  "version": "0.0.1",
+  "cancelationCriteria": "",
+  "sshConnectionId": "@@env:sshConnectionId@@",
+  "timeout": 0,
+  "parameters": [
+    {
+      "description": "Nome do modelo",
+      "name": "modelName",
+      "type": "List",
+      "defaultValue": "newave",
+      "visible": true,
+      "regexPattern": "",
+      "format": "",
+      "order": 0,
+      "options": [
+        "newave",
+        "decomp"
+      ]
+    },
+    {
+      "description": "Versão do modelo a ser publicada",
+      "name": "modelVersion",
+      "type": "String",
+      "defaultValue": "",
+      "visible": true,
+      "regexPattern": "",
+      "format": "",
+      "order": 1,
+      "options": []
+    },
+    {
+      "description": "Arquivo com os executáveis necessários e arquivo de licença",
+      "name": "executablesFile",
+      "type": "File",
+      "defaultValue": "",
+      "visible": true,
+      "regexPattern": "",
+      "format": "",
+      "order": 2,
+      "options": []
+    },
+    {
+      "description": "Versão da CLI de upload de versões",
+      "name": "uploadCliVersion",
+      "type": "String",
+      "defaultValue": "v1.0.0",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 3,
+      "options": []
+    },
+    {
+      "description": "Caminho utilizado para a execucao",
+      "name": "path",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "(?<=Created temporary dir\\s)(/[^ ]+)",
+      "format": "{0}",
+      "order": 4,
+      "options": []
+    },
+    {
+      "description": "Caminho para criação de diretorios temporarios",
+      "name": "rootPath",
+      "type": "String",
+      "defaultValue": "@@env:rootPath@@",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 5,
+      "options": []
+    },
+    {
+      "description": "Bucket com as versoes dos executaveis para serem utilizados",
+      "name": "versionsBucket",
+      "type": "String",
+      "defaultValue": "@@env:versionsBucket@@",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 6,
+      "options": []
+    }
+  ],
+  "workflowTasks": [
+    {
+      "workflowTaskId": "3af8b15c-bccf-4031-a866-232417da90ba",
+      "alias": null,
+      "taskId": "@@task:v1-create-workdir@@",
+      "executionCriteria": "",
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "eb99d164-4aea-4aba-b16c-e84646d03628",
+      "alias": null,
+      "taskId": "@@task:v1-clone-upload-cli@@",
+      "executionCriteria": "",
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "5c45bb67-c7c9-4827-9f4e-d7cf0358dafb",
+      "alias": null,
+      "taskId": "@@task:v1-upload-version@@",
+      "executionCriteria": "",
+      "onFailure": 1
+    },
+    {
+      "workflowTaskId": "ef6153e2-7c9e-46b3-bb20-5cd2d664859f",
+      "alias": null,
+      "taskId": "@@task:v1-remove-workdir@@",
+      "executionCriteria": "",
+      "onFailure": 1
+    }
+  ],
+  "cancelationTasks": [
+    {
+      "workflowTaskId": "544e60b4-f9b3-44c0-837d-a1dc7d498f81",
+      "alias": null,
+      "taskId": "@@task:v1-remove-workdir@@",
+      "executionCriteria": ""
+    }
+  ],
+  "tags": [],
+  "observation": "",
+  "isSchedulesActive": false,
+  "workflowTaskMetadata": [
+    {
+      "workflowTaskId": "startNode",
+      "measured": {
+        "height": 36,
+        "width": 288
+      },
+      "position": {
+        "x": 100,
+        "y": -150
+      },
+      "type": "startNode"
+    },
+    {
+      "workflowTaskId": "3af8b15c-bccf-4031-a866-232417da90ba",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 100,
+        "y": 0
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "eb99d164-4aea-4aba-b16c-e84646d03628",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 100,
+        "y": 250
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "5c45bb67-c7c9-4827-9f4e-d7cf0358dafb",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 100,
+        "y": 500
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "ef6153e2-7c9e-46b3-bb20-5cd2d664859f",
+      "measured": {
+        "height": 182,
+        "width": 288
+      },
+      "position": {
+        "x": 100,
+        "y": 750
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "endNode",
+      "measured": {
+        "height": 36,
+        "width": 288
+      },
+      "position": {
+        "x": 100,
+        "y": 1000
+      },
+      "type": "endNode"
+    }
+  ],
+  "cancellationTaskMetadata": [
+    {
+      "workflowTaskId": "startNode",
+      "measured": {
+        "height": 36,
+        "width": 288
+      },
+      "position": {
+        "x": 50,
+        "y": 150
+      },
+      "type": "startNode"
+    },
+    {
+      "workflowTaskId": "544e60b4-f9b3-44c0-837d-a1dc7d498f81",
+      "measured": {
+        "height": 152,
+        "width": 288
+      },
+      "position": {
+        "x": 100,
+        "y": 250
+      },
+      "type": "taskNode"
+    },
+    {
+      "workflowTaskId": "endNode",
+      "measured": {
+        "height": 36,
+        "width": 288
+      },
+      "position": {
+        "x": 450,
+        "y": 150
+      },
+      "type": "endNode"
+    }
+  ],
+  "taskExecutionCriterias": [
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": null,
+      "targetWorkflowTaskId": "3af8b15c-bccf-4031-a866-232417da90ba"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "3af8b15c-bccf-4031-a866-232417da90ba",
+      "targetWorkflowTaskId": "eb99d164-4aea-4aba-b16c-e84646d03628"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "eb99d164-4aea-4aba-b16c-e84646d03628",
+      "targetWorkflowTaskId": "5c45bb67-c7c9-4827-9f4e-d7cf0358dafb"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "5c45bb67-c7c9-4827-9f4e-d7cf0358dafb",
+      "targetWorkflowTaskId": "ef6153e2-7c9e-46b3-bb20-5cd2d664859f"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "ef6153e2-7c9e-46b3-bb20-5cd2d664859f",
+      "targetWorkflowTaskId": null
+    }
+  ],
+  "cancellationTaskExecutionCriterias": [
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": null,
+      "targetWorkflowTaskId": "544e60b4-f9b3-44c0-837d-a1dc7d498f81"
+    },
+    {
+      "criteriaExpression": "true",
+      "sourceWorkflowTaskId": "544e60b4-f9b3-44c0-837d-a1dc7d498f81",
+      "targetWorkflowTaskId": null
+    }
+  ],
+  "schedules": []
+}
