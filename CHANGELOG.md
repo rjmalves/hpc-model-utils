@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## The 2.x series
+
+2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. The next release tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)) and cleans the logs.
+
+## [Unreleased]
+
+### Behavior changes
+
+- A chained DECOMP run whose dadger `FC NEWCUT` names a `cortes-NNN.dat` other than the stage its horizon end needs now fails in `preprocess` with `DATA_ERROR` (`SetDataError`) before any job is submitted; 2.0.0 to 2.1.0 only appended the mismatch to the annotation. See [`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md).
+
+### Changed
+
+- Relayed job-log lines and the sintetizador, nwlistcf and nwlistop output are written verbatim, without the CLI's timestamp and logger prefix, and `LOGLEVEL` no longer filters them.
+- The finalize job log keeps only sintetizador's WARNING-or-above lines and a one-line summary; the full output is in `saidas/logs/synthesis.out`.
+- A typed error (`DataError`, `UsageError`, …) on a command's fatal path is logged as one `<command> failed: <category>: <message>` line instead of a traceback; unexpected exceptions keep the traceback.
+- `deploy/modelops/check_relay.py` reads the verbatim relay and still reads the prefixed relay of 2.0.x and 2.1.0 runs.
+
+### Added
+
+- `saidas/logs/synthesis.out`: sintetizador's complete output.
+- `docs/architecture.md` and a README rewritten for v2.
+- `docs/notices/v2-fc-stage-mismatch.md`.
+- `deploy/modelops/workflows/cobre.json`: the `cobre` workflow, with its own `cobre-run` and `ensure-utils` Tasks.
+- `deploy/modelops/tasks/`: the seven shared Tasks (`create-workdir`, `remove-workdir`, `fetch-executables`, `fetch-inputs`, `extract-sanitize`, `result-upload` and `cancel-run`) accept the model `cobre`.
+- `deploy/modelops/workflows/upload-versao.json`: `Upload Versão` offers the model `cobre` and runs upload-versoes-cli 1.1.0.
+- `docs/runbooks/cobre-rollout.md`: the runbook that applies the cobre definitions to ModelOps and validates cobre on the cluster.
+
 ## [2.1.0] - 2026-10-05
 
 NEWAVE and DECOMP behavior is unchanged from 2.0.2.
@@ -15,6 +42,14 @@ NEWAVE and DECOMP behavior is unchanged from 2.0.2.
 - The cobre outcome mapping: a run whose model log never shows cobre-mpi's `Backend:   MPI` line is `RUNTIME_ERROR`; otherwise exits 1 and 2 are `DATA_ERROR` and exits 3 and 4 are `RUNTIME_ERROR`; a run that exits 0 is `SUCCESS` only when every enabled phase wrote its metadata, training completed, and every simulation scenario completed; never `INFEASIBLE`.
 - cobre artifacts: `saidas/training.zip`, `saidas/policy.zip`, `saidas/simulation.zip` and the raw `saidas/training/metadata.json` and `saidas/simulation/metadata.json`; no sintetizador step.
 - The platform-identifier set covers the `maxCoresPerNode` workflow parameter.
+- `deploy/modelops/workflows/ranqueamento.json` and `deploy/modelops/workflows/upload-versao.json`: the `Ranqueamento Prospectivo` and `Upload Versão` workflows are now managed under `deploy/modelops/` and use the v2 shared Tasks.
+- `docs/runbooks/v2-switch.md`: the operator procedure that switches the original workflows to the v2 definitions, with its rollback.
+- `docs/runbooks/v2-sweep.md`: the operator procedure that moves the shared Tasks onto the v2 set.
+
+### Changed
+
+- `deploy/modelops/workflows/`: `NEWAVE - PEM`, `DECOMP - PEM` and `Upload NEWAVE` now use the v2 Tasks, and the `[v2]` workflow copies are removed.
+- `docs/notices/v2-status-semantics.md`: names the workflows that switch to v2 (v2.0.2 or later) and adds a checklist for encadeador developers.
 
 ## [2.0.2] - 2026-10-04
 
@@ -25,6 +60,8 @@ NEWAVE and DECOMP behavior is unchanged from 2.0.2.
 ### Added
 
 - `HPCMU_MISSING_LOG_GRACE`: how long the relay keeps looking for a job log it never saw, after the job leaves the queue (default 90 s).
+- `deploy/modelops/workflows/*-v2.json`: the `NEWAVE - PEM [v2]`, `DECOMP - PEM [v2]` and `Upload NEWAVE [v2]` workflow copies, for validating v2 beside the original workflows.
+- `docs/runbooks/v2-pre-rollout.md`: the validation runbook for the `[v2]` copies, run before the original workflows switch to v2.
 
 ## [2.0.1] - 2026-10-03
 
@@ -38,6 +75,9 @@ NEWAVE and DECOMP behavior is unchanged from 2.0.2.
 - `deploy/modelops/`: templated ModelOps Task and Workflow definitions, with a structural publication lint.
 - `deploy/modelops/scripts/ensure-tools.sh`: immutable per-commit tool installs on an exact-patch shared interpreter.
 - A read-only definitions snapshot command (`python -m deploy.modelops.apply snapshot`).
+- `deploy/modelops/apply.py`: `python -m deploy.modelops.apply sync` prints a read-only dry-run diff of the definitions against ModelOps.
+- `deploy/modelops/apply.py`: `python -m deploy.modelops.apply sync --apply` is the only write path, and it writes only from a clean working tree after a typed confirmation.
+- `deploy/modelops/check_relay.py`: a relay-completeness checker that compares a run's relayed output with its job logs and reports the first lost, extra or changed line.
 
 ## [2.0.0] - 2026-10-03
 
