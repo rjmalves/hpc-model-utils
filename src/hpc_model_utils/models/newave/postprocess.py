@@ -21,7 +21,7 @@ from hpc_model_utils.infra.errors import ShellCommandError
 from hpc_model_utils.infra.shell import run as shell_run
 from hpc_model_utils.models.newave import deck
 
-logger = logging.getLogger(__name__)
+_CHILD_OUTPUT = logging.getLogger("hpc_model_utils.finalize")
 
 
 def _nwlistcf_arquivos_dat(month: int) -> str:
@@ -95,7 +95,7 @@ def _invoke(
             [str(ws.assets / program)],
             cwd=ws.root,
             timeout=timeout,
-            on_line=logger.info,
+            on_line=_CHILD_OUTPUT.info,
         )
     except ShellCommandError as exc:
         cause = exc.__cause__

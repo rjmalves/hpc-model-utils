@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -187,17 +188,21 @@ def test_cli_version_option_exits_zero_with_no_stderr() -> None:
 # ---------------------------------------------------------------------------
 
 
+_RELAY_LOGGER_NAMES = ("hpc_model_utils.job", "hpc_model_utils.finalize")
+
+
 @pytest.fixture
 def _restore_root_loggers() -> Iterator[None]:
-    app_logger = logging.getLogger("hpc_model_utils")
-    warn_logger = logging.getLogger("py.warnings")
-    app_handlers = list(app_logger.handlers)
-    warn_handlers = list(warn_logger.handlers)
-    app_level = app_logger.level
+    names = ("hpc_model_utils", "py.warnings", *_RELAY_LOGGER_NAMES)
+    saved = [
+        (logger, list(logger.handlers), logger.level, logger.propagate)
+        for logger in map(logging.getLogger, names)
+    ]
     yield
-    app_logger.handlers = app_handlers
-    warn_logger.handlers = warn_handlers
-    app_logger.level = app_level
+    for logger, handlers, level, propagate in saved:
+        logger.handlers = handlers
+        logger.level = level
+        logger.propagate = propagate
 
 
 def test_configure_logging_attaches_same_handler_to_app_and_warnings_logger(
@@ -220,6 +225,45 @@ def test_configure_logging_uses_loglevel_env_override(
     configure_logging()
 
     assert logging.getLogger("hpc_model_utils").level == logging.DEBUG
+
+
+def test_configure_logging_relays_child_output_verbatim_despite_loglevel(
+    _restore_root_loggers: None,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("LOGLEVEL", "WARNING")
+    configure_logging()
+
+    logging.getLogger("hpc_model_utils.job").info("HPCMU_START job=1")
+    logging.getLogger("hpc_model_utils.finalize").info(
+        "2026-10-04 20:21:31,000 INFO: síntese"
+    )
+
+    assert capsys.readouterr().out.splitlines() == [
+        "HPCMU_START job=1",
+        "2026-10-04 20:21:31,000 INFO: síntese",
+    ]
+
+
+def test_configure_logging_keeps_timestamped_format_for_cli_own_lines(
+    _restore_root_loggers: None,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("LOGLEVEL", raising=False)
+    configure_logging()
+
+    logging.getLogger("hpc_model_utils.core.lifecycle.run").info(
+        "run finished: SUCCESS [x]"
+    )
+
+    (line,) = capsys.readouterr().out.splitlines()
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} INFO "
+        r"hpc_model_utils\.core\.lifecycle\.run: run finished: SUCCESS \[x\]",
+        line,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +313,16 @@ def test_pipe_aware_stream_handler_other_error_uses_default_handle_error(
     _pipe_aware_logger.info("hello")  # must not raise
 
     assert "--- Logging error ---" in capsys.readouterr().err
+
+
+def test_configure_logging_verbatim_handler_broken_pipe_propagates(
+    _restore_root_loggers: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "stdout", _RaisingStream(BrokenPipeError("boom")))
+    configure_logging()
+
+    with pytest.raises(BrokenPipeError, match="boom"):
+        logging.getLogger("hpc_model_utils.job").info("relayed line")
 
 
 # ---------------------------------------------------------------------------

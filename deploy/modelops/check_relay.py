@@ -10,6 +10,16 @@ exported relayed-output file, with the CLI's own ``[hpcmu] `` markers
 classified as informational (dropped, counted) or an anomaly (dropped,
 reported) rather than real output.
 
+Two export formats are read. The prefixed format (v2.0.x and v2.1.0)
+carries each relayed line behind ``<ts> INFO hpc_model_utils.job: ``; it
+is recognised when any line contains that marker, and the text after the
+marker is the relayed line. The verbatim format (v2.2.0 on) carries each
+relayed line exactly as the job printed it; the relayed lines are then
+the ones between the last ``Submitted batch job <id>`` line and the first
+``${CurrentExecution.`` hook line, minus ModelOps's own ``Parâmetro
+dinâmico do tipo "`` lines. Anything else in that window (a login-side
+line, say) is not dropped: it surfaces as an ``extra`` divergence.
+
 On a mismatch, the first divergence's *kind* comes from the first
 non-equal ``difflib.SequenceMatcher`` opcode over a bounded window
 starting at that index, rather than a length tiebreak: a ``delete``
@@ -41,6 +51,10 @@ from hpc_model_utils.core.follow import LogTail
 from hpc_model_utils.platform.encoding import neutralize
 
 _RELAY_MARKER = " INFO hpc_model_utils.job: "
+_EXECUTION_OUTPUT = "[ExecutionOutput] "
+_SUBMITTED_RE = re.compile(r"Submitted batch job \d+")
+_HOOK_PREFIX = "${CurrentExecution."
+_MODELOPS_PARAMETER_PREFIX = 'Parâmetro dinâmico do tipo "'
 _AMBIGUOUS_REASON = "ambiguous marker in job log"
 _CONTEXT_LINES = 3
 _CONTEXT_CHARS = 200
@@ -100,16 +114,60 @@ def _split_lines(text: str) -> list[str]:
     return parts
 
 
+def _payload(raw: str) -> str:
+    start = raw.find(_EXECUTION_OUTPUT)
+    if start != -1:
+        rest = raw[start + len(_EXECUTION_OUTPUT) :]
+        sep = rest.find(": ")
+        if sep != -1:
+            return rest[sep + 2 :]
+    return raw
+
+
+def _verbatim_window(payloads: list[str]) -> list[str]:
+    submitted = [
+        i for i, p in enumerate(payloads) if _SUBMITTED_RE.fullmatch(p)
+    ]
+    if not submitted:
+        raise CheckRelayError(
+            "no 'Submitted batch job' line: not a run Task export"
+        )
+    start = submitted[-1] + 1
+    end = next(
+        (
+            i
+            for i in range(start, len(payloads))
+            if payloads[i].startswith(_HOOK_PREFIX)
+        ),
+        len(payloads),
+    )
+    return [
+        p
+        for p in payloads[start:end]
+        if not p.startswith(_MODELOPS_PARAMETER_PREFIX)
+    ]
+
+
+def _prefixed_messages(raws: Sequence[str]) -> list[str]:
+    messages: list[str] = []
+    for raw in raws:
+        idx = raw.find(_RELAY_MARKER)
+        if idx != -1:
+            messages.append(raw[idx + len(_RELAY_MARKER) :])
+    return messages
+
+
 def relayed_lines(path: Path) -> RelayedResult:
     text = path.read_bytes().decode("utf-8", errors="replace")
+    raws = _split_lines(text)
+    if any(_RELAY_MARKER in raw for raw in raws):
+        messages = _prefixed_messages(raws)
+    else:
+        messages = _verbatim_window([_payload(raw) for raw in raws])
     lines: list[str] = []
     informational = 0
     anomalies: list[str] = []
-    for raw in _split_lines(text):
-        idx = raw.find(_RELAY_MARKER)
-        if idx == -1:
-            continue
-        message = raw[idx + len(_RELAY_MARKER) :]
+    for message in messages:
         if message.startswith(_INFO_PREFIXES) or _INFO_JOB_STATUS_RE.match(
             message
         ):

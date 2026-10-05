@@ -167,6 +167,9 @@ class _PipeAwareStreamHandler(logging.StreamHandler[TextIO]):
         super().handleError(record)
 
 
+_VERBATIM_LOGGERS = ("hpc_model_utils.job", "hpc_model_utils.finalize")
+
+
 def configure_logging() -> None:
     handler = _PipeAwareStreamHandler(sys.stdout)
     handler.setFormatter(
@@ -175,6 +178,15 @@ def configure_logging() -> None:
     app_logger = logging.getLogger("hpc_model_utils")
     app_logger.setLevel(os.environ.get("LOGLEVEL", "INFO"))
     app_logger.addHandler(handler)
+    # Child-process and relayed lines carry their own timestamps: written
+    # as received, once, and never filtered by LOGLEVEL (ADR-046).
+    verbatim = _PipeAwareStreamHandler(sys.stdout)
+    verbatim.setFormatter(logging.Formatter("%(message)s"))
+    for name in _VERBATIM_LOGGERS:
+        child_output = logging.getLogger(name)
+        child_output.setLevel(logging.INFO)
+        child_output.propagate = False
+        child_output.addHandler(verbatim)
     # logging.captureWarnings(True) (set by stdio.install()) attaches a
     # NullHandler to "py.warnings" on first use, which silently drops
     # every captured warning: "py.warnings" is not an ancestor of
