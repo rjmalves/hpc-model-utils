@@ -7,8 +7,11 @@ NEWAVE and DECOMP workflows.
 
 ## When
 
-When the prd workflows switch to hpc-model-utils v2; the date is announced
-with this notice.
+When the prd workflows `NEWAVE - PEM`, `DECOMP - PEM` and `Upload NEWAVE`
+switch to hpc-model-utils v2 (v2.0.2 or later); the date is announced with this
+notice. The workflow ids and parameter names do not change: encadeador keeps
+sending `inputFile`, `coreCount`, `modelVersion` and `parentPath` exactly as
+today.
 
 ## What changes
 
@@ -78,5 +81,33 @@ section "Intended differences", for the full list; the headline changes are:
 
 The DECOMP FC stage-mismatch check is currently a warning only, appended to
 the annotation. Its promotion to a `DATA_ERROR` outcome is **not** part of
-this v2.0.0 change; it ships in a later change and will be announced in its
+the v2.0.x releases; it ships in a later change and will be announced in its
 own, separate notice.
+
+## Checklist for encadeador developers
+
+Before the switch date, check each point against encadeador's code:
+
+1. **Flexibilization trigger.** Only a real DECOMP infeasibility (`INFEASIBLE`,
+   rule `decomp.infeasible`) still arrives as `SetModelError`. A max-iterations
+   stop, a negative gap, a crash or a missing `relato` now arrive as
+   `SetRuntimeError`. If encadeador flexibilizes or retries on a runtime error,
+   confirm that this is the intended reaction to these cases.
+2. **NEWAVE outcomes no longer reported as success.** An incomplete final
+   simulation, a missing `pmo.dat` and a missing sintetizador now end as
+   `SetRuntimeError`, where v1 reported `SetSuccess`. A chained DECOMP run
+   whose parent ended this way is refused by the parent gate, because the
+   parent's status is not `SUCCESS`.
+3. **Job-level outcomes.** Timeout, node failure, licence failure and
+   cancellation now always end as `SetRuntimeError`, with a `TIMEOUT:`,
+   `INFRA_ERROR:`, `LICENSE_ERROR:` or `CANCELLED:` annotation. In v1 they
+   depended on whatever the partial outputs looked like.
+4. **Annotation text.** If encadeador reads or displays the run's annotation,
+   expect the `<STATUS>: <reason> [<rule_id>]` form.
+5. **Artifacts.** If encadeador reads any file from a run's artifacts other
+   than `saidas/metadata.modelops`, check it against "Artifact changes" above.
+6. **Not yet exercised on prd.** The INFEASIBLE → flexibilization → next-run
+   loop driven by encadeador was not run end to end on the v2 validation
+   copies before the switch. The first infeasible DECOMP case after the switch
+   should be watched.
+
