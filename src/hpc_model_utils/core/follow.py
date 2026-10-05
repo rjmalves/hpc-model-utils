@@ -530,7 +530,7 @@ def follow(
                 )
                 started = None
                 deadline = None
-            if prev_state is None or prev_state not in PENDING_LIKE:
+            if prev_state not in PENDING_LIKE:
                 pending_since = now()
             if _never_clearing(st.reason):
                 raise FollowAborted("pending_reason", st.reason, job_id)

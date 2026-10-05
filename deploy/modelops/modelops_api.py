@@ -22,6 +22,7 @@ configured ``MODELOPS_URL`` host.
 
 from __future__ import annotations
 
+import http.client
 import json
 import re
 import ssl
@@ -134,13 +135,16 @@ class ModelOpsClient:
             with _build_opener().open(request, timeout=_TIMEOUT_S) as response:
                 payload: bytes = response.read()
         except urllib.error.HTTPError as err:
-            text = redact(
-                err.read().decode("utf-8", errors="replace"), self.token
-            )[:_MAX_BODY_CHARS]
+            try:
+                text = redact(
+                    err.read().decode("utf-8", errors="replace"), self.token
+                )[:_MAX_BODY_CHARS]
+            except (OSError, http.client.HTTPException):
+                text = "response body unreadable"
             raise ModelOpsApiError(
                 redact(f"{method} {path}: HTTP {err.code}: {text}", self.token)
             ) from err
-        except (urllib.error.URLError, ssl.SSLError, TimeoutError) as err:
+        except (OSError, http.client.HTTPException) as err:
             raise ModelOpsApiError(
                 redact(f"{method} {path}: {err}", self.token)
             ) from err

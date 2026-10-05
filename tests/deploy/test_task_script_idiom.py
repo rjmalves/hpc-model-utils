@@ -28,6 +28,13 @@ from typing import Any
 import pytest
 
 from deploy.modelops.render import load_env, render_task
+from tests.support.script_harness import (
+    EXECUTION_HASH,
+    EXECUTION_ID,
+    EXECUTION_ID_PARAMETER,
+    SHA,
+    prepare_command,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODELOPS = REPO_ROOT / "deploy" / "modelops"
@@ -53,7 +60,6 @@ AWS_SLUGS = frozenset(
     {"fetch-executables", "fetch-inputs", "result-upload", "ingest-offline"}
 )
 
-EXECUTION_ID_PARAMETER = "CurrentExecution.ExecutionId"
 PARAMETER_VARIABLES = {
     "modelName": "MODEL",
     "rootPath": "ROOT_PATH",
@@ -197,14 +203,15 @@ _FORBIDDEN: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
-def _is_validation(line: str) -> bool:
-    match = _VALIDATION.fullmatch(line)
-    return match is not None and not _UNSAFE_VALIDATION.search(match.group(1))
-
-
 def _validation_message(line: str) -> str | None:
     match = _VALIDATION.fullmatch(line)
-    return match.group(2) if match and _is_validation(line) else None
+    if match is None or _UNSAFE_VALIDATION.search(match.group(1)):
+        return None
+    return match.group(2)
+
+
+def _is_validation(line: str) -> bool:
+    return _validation_message(line) is not None
 
 
 def _refers_to(line: str, variable: str) -> bool:
@@ -984,19 +991,7 @@ def test_task_documents_carry_the_switch_names(slug: str) -> None:
     assert document == TASK_DOCUMENTS[slug]
 
 
-_REFERENCE_NAMES = re.compile(r"\{\{(.*?)\}\}")
 _ENV_TOKEN = re.compile(r"@@env:([A-Za-z][A-Za-z0-9]*)@@")
-
-
-def _prepare_command(script: str, values: Mapping[str, str]) -> str:
-    """Emulate WorkflowExecutionService.PrepareCommand.
-
-    Each distinct ``{{name}}`` is replaced everywhere, in order of first
-    appearance in the original script; an unknown name becomes "".
-    """
-    for name in dict.fromkeys(_REFERENCE_NAMES.findall(script)):
-        script = script.replace("{{" + name + "}}", values.get(name, ""))
-    return script
 
 
 def _render_env(text: str, env: Mapping[str, str]) -> str:
@@ -1006,18 +1001,18 @@ def _render_env(text: str, env: Mapping[str, str]) -> str:
 def test_prepare_command_replaces_each_name_everywhere() -> None:
     script = "{{a}} {{b}} {{a}}"
 
-    assert _prepare_command(script, {"a": "1", "b": "2"}) == "1 2 1"
+    assert prepare_command(script, {"a": "1", "b": "2"}) == "1 2 1"
 
 
 def test_prepare_command_unknown_name_becomes_empty() -> None:
-    assert _prepare_command("x{{unknown}}y", {}) == "xy"
+    assert prepare_command("x{{unknown}}y", {}) == "xy"
 
 
 def test_prepare_command_value_names_expand_only_for_later_names() -> None:
     values = {"a": "{{b}}", "b": "B"}
 
-    assert _prepare_command("{{a}}\n{{b}}", values) == "B\nB"
-    assert _prepare_command("{{b}}\n{{a}}", values) == "B\n{{b}}"
+    assert prepare_command("{{a}}\n{{b}}", values) == "B\nB"
+    assert prepare_command("{{b}}\n{{a}}", values) == "B\n{{b}}"
 
 
 def test_prepare_command_injected_execution_id_stays_literal() -> None:
@@ -1025,7 +1020,7 @@ def test_prepare_command_injected_execution_id_stays_literal() -> None:
     script = f"{token}\n{{{{x}}}}\n{token}"
     values = {EXECUTION_ID_PARAMETER: "GUID", "x": f"v\n{token}"}
 
-    assert _prepare_command(script, values) == f"GUID\nv\n{token}\nGUID"
+    assert prepare_command(script, values) == f"GUID\nv\n{token}\nGUID"
 
 
 def test_render_env_replaces_every_token() -> None:
@@ -1037,9 +1032,6 @@ def test_render_env_unknown_name_is_an_error() -> None:
         _render_env("@@env:missing@@", {"k": "v"})
 
 
-EXECUTION_ID = "d14629c2-5a1e-4b6f-9c3d-0123456789ab"
-EXECUTION_HASH = "0123456789abcdef" * 4
-SHA = "a" * 40
 EXECUTION_NAME = "PMO Água 'x' \"y\" $z $(id) ${HOME}"
 _SAFE_PATH = re.compile(r"/[A-Za-z0-9._/-]+")
 _STUB = """#!{bash}
@@ -1157,7 +1149,7 @@ def _run(
     wrapped: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     values = {**sandbox.values(model), **(overrides or {})}
-    script = _prepare_command(
+    script = prepare_command(
         _render_env((TASKS / f"{slug}.sh").read_text("utf-8"), sandbox.env),
         values,
     )
@@ -1707,7 +1699,7 @@ def _run_ensure(
     model: str = "newave",
 ) -> subprocess.CompletedProcess[str]:
     task = render_task(ENSURE_SLUG, MODELOPS, load_env(sandbox.env_file))
-    script = _prepare_command(
+    script = prepare_command(
         task["script"], {**sandbox.values(model), **(overrides or {})}
     )
     return subprocess.run(

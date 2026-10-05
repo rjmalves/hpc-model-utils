@@ -186,9 +186,7 @@ class _ApplyGroup(click.Group):
             _fail(str(exc), 2)
         except ApplyRefused as exc:
             _fail(str(exc), exc.code)
-        except ModelOpsApiError as exc:
-            _fail(str(exc), 1)
-        except OSError as exc:
+        except (ModelOpsApiError, OSError) as exc:
             _fail(str(exc), 1)
 
 
@@ -312,9 +310,8 @@ def _classify(
         counts["failures" if status == "MISSING" else status.lower()] += 1
         is_protected = kind == "task" and doc_id in protected
         emit(f"{status} {kind} {slug}{' PROTECTED' if is_protected else ''}")
-        if delta:
-            for line in delta.splitlines():
-                emit(line)
+        for line in delta.splitlines():
+            emit(line)
         entries.append(
             Entry(
                 kind,

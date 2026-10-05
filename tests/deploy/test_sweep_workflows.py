@@ -22,12 +22,12 @@ from typing import Any
 import pytest
 
 from deploy.modelops.render import load_env, render_task, render_workflow
-from tests.deploy.test_task_script_idiom import (
+from tests.support.script_harness import (
     EXECUTION_HASH,
     EXECUTION_ID,
     EXECUTION_ID_PARAMETER,
     SHA,
-    _prepare_command,
+    prepare_command,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -740,7 +740,7 @@ def _run_ranking(
         "script"
     ]
     return subprocess.run(
-        ["bash", "-c", _prepare_command(script, _values(box, overrides))],
+        ["bash", "-c", prepare_command(script, _values(box, overrides))],
         cwd=box.base,
         env={"PATH": os.environ["PATH"], "LC_ALL": "C"},
         capture_output=True,

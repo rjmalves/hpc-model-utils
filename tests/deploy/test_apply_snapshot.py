@@ -9,8 +9,12 @@ from __future__ import annotations
 
 import json
 import os
+import socket
+import struct
 import subprocess
+import threading
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -286,6 +290,76 @@ def test_apply_snapshot_transport_redirect_raises_modelopsapierror(
 
     assert evil.requests == []
     assert TOKEN not in str(excinfo.value)
+
+
+_PARTIAL_RESPONSE = b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n[{"
+
+
+@contextmanager
+def _one_shot_server(reply: bytes, *, reset: bool) -> Iterator[str]:
+    """Serve one connection: read the request, write ``reply``, then
+    close -- with an RST instead of a FIN when ``reset``."""
+    with socket.create_server(("127.0.0.1", 0)) as listener:
+        listener.settimeout(5)
+
+        def serve() -> None:
+            conn, _ = listener.accept()
+            with conn, conn.makefile("rb") as request:
+                while request.readline() not in (b"\r\n", b""):
+                    pass
+                conn.sendall(reply)
+                if reset:
+                    conn.setsockopt(
+                        socket.SOL_SOCKET,
+                        socket.SO_LINGER,
+                        struct.pack("ii", 1, 0),
+                    )
+
+        thread = threading.Thread(target=serve, daemon=True)
+        thread.start()
+        yield f"http://127.0.0.1:{listener.getsockname()[1]}"
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize(
+    ("reply", "reset"),
+    [
+        pytest.param(b"", False, id="closed-before-response"),
+        pytest.param(_PARTIAL_RESPONSE, True, id="reset-mid-response"),
+        pytest.param(_PARTIAL_RESPONSE, False, id="truncated-body"),
+    ],
+)
+def test_apply_snapshot_transport_dropped_connection_raises_modelopsapierror(
+    reply: bytes, reset: bool
+) -> None:
+    path = f"/api/Workflow/all?probe={TOKEN}"
+
+    with _one_shot_server(reply, reset=reset) as url:
+        client = ModelOpsClient(base_url=url, token=TOKEN)
+        with pytest.raises(
+            ModelOpsApiError, match=r"^GET /api/Workflow/all"
+        ) as excinfo:
+            client.get_json(path)
+
+    assert TOKEN not in str(excinfo.value)
+    assert "<redacted>" in str(excinfo.value)
+
+
+def test_apply_snapshot_transport_http_error_with_truncated_body_raises_modelopsapierror() -> (
+    None
+):
+    reply = b"HTTP/1.1 500 Err\r\nContent-Length: 100\r\n\r\nxx"
+    path = f"/api/Workflow/all?probe={TOKEN}"
+
+    with _one_shot_server(reply, reset=False) as url:
+        client = ModelOpsClient(base_url=url, token=TOKEN)
+        with pytest.raises(
+            ModelOpsApiError, match=r"^GET /api/Workflow/all.*HTTP 500"
+        ) as excinfo:
+            client.get_json(path)
+
+    assert TOKEN not in str(excinfo.value)
+    assert "<redacted>" in str(excinfo.value)
 
 
 def test_apply_snapshot_transport_ignores_http_proxy_env(
