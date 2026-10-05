@@ -92,6 +92,24 @@ sys.exit(PAYLOAD["exit_code"])
 """
 
 
+_BRIDGE_BODY = r"""
+import json
+import os
+import sys
+from pathlib import Path
+
+record = {"argv": sys.argv[1:], "cwd": os.getcwd()}
+with open(CALLS, "a", encoding="utf-8") as handle:
+    handle.write(json.dumps(record) + "\n")
+if EXIT_CODE:
+    print("dashboard failed", file=sys.stderr)
+    sys.exit(EXIT_CODE)
+target = Path(sys.argv[sys.argv.index("--output") + 1])
+target.parent.mkdir(parents=True, exist_ok=True)
+target.write_text("<html></html>\n", encoding="utf-8")
+"""
+
+
 def _write_cli_shim(dest_dir: Path) -> Path:
     """Real-registry shim: tests/support/cli_shim.py installs the fake one."""
     shim = dest_dir / "hpcmu-cobre-cli"
@@ -106,19 +124,17 @@ def _write_cli_shim(dest_dir: Path) -> Path:
     return shim
 
 
-def _write_bridge_stub(dest_dir: Path) -> Path:
-    """A ``cobre-bridge`` stub: like ``build_dashboard``, it creates the
-    parent of the ``--output`` path and writes a minimal HTML file."""
+def _write_bridge_stub(dest_dir: Path, calls: Path, exit_code: int) -> Path:
+    """A ``cobre-bridge`` stub: it records its call; like ``build_dashboard``
+    it then creates the parent of the ``--output`` path and writes a
+    minimal HTML file, or fails with ``exit_code`` and writes nothing."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     stub = dest_dir / "cobre-bridge"
     stub.write_text(
         f"#!{sys.executable}\n"
-        "import sys\n"
-        "from pathlib import Path\n"
-        "\n"
-        'target = Path(sys.argv[sys.argv.index("--output") + 1])\n'
-        "target.parent.mkdir(parents=True, exist_ok=True)\n"
-        'target.write_text("<html></html>\\n", encoding="utf-8")\n',
+        f"CALLS = {str(calls)!r}\n"
+        f"EXIT_CODE = {exit_code!r}\n"
+        f"{_BRIDGE_BODY}",
         encoding="utf-8",
     )
     stub.chmod(0o755)
@@ -143,6 +159,7 @@ class _Stub:
     simulation: Mapping[str, object] = field(
         default_factory=simulation_metadata
     )
+    dashboard_exit: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +170,7 @@ class _Outcome:
     store: RecordingObjectStore
     submitted: list[dict[str, Any]]
     calls: list[dict[str, Any]]
+    bridge_calls: list[dict[str, Any]]
 
 
 def _payload(stub: _Stub, scratch: Path) -> dict[str, object]:
@@ -196,6 +214,7 @@ def _run_cobre(
 ) -> _Outcome:
     ws = cobre_workspace(tmp_path).ws
     calls = tmp_path / "calls.jsonl"
+    bridge_calls = tmp_path / "bridge-calls.jsonl"
     _write_stub(ws, calls, _payload(stub, tmp_path / "scratch"))
 
     state_store = StateStore(ws)
@@ -230,7 +249,9 @@ def _run_cobre(
             resources=res,
             tools=tools,
             skip_model=False,
-            synthesis_bin=_write_bridge_stub(tmp_path / "bridge"),
+            synthesis_bin=_write_bridge_stub(
+                tmp_path / "bridge", bridge_calls, stub.dashboard_exit
+            ),
         ),
         JobLedger(),
         settings=settings,
@@ -248,6 +269,11 @@ def _run_cobre(
         store=store,
         submitted=fake_slurm.submitted(),
         calls=[json.loads(line) for line in calls.read_text().splitlines()],
+        bridge_calls=(
+            [json.loads(line) for line in bridge_calls.read_text().splitlines()]
+            if bridge_calls.exists()
+            else []
+        ),
     )
 
 
@@ -476,3 +502,75 @@ def test_cobre_scenario_not_started_backend_is_runtime_error_mpi_not_started(
     assert diagnosis.rule_id == "cobre.mpi_not_started"
     assert _status_hooks(outcome) == [Hook("SetRuntimeError", ())]
     assert "no Backend line" in _annotations(outcome)[0]
+
+
+@pytest.mark.timeout(60)
+def test_cobre_scenario_success_publishes_the_dashboard(
+    fake_slurm: FakeSlurm, tmp_path: Path
+) -> None:
+    outcome = _run_cobre(
+        tmp_path, fake_slurm, Resources("batch", 4, max_cores_per_node=4)
+    )
+
+    assert outcome.bridge_calls == [
+        {
+            "argv": [
+                "dashboard",
+                "caso_cobre",
+                "--output",
+                "sintese/dashboard.html",
+            ],
+            "cwd": str(outcome.ws.root),
+        }
+    ]
+    assert {
+        "sintese/dashboard.html",
+        "saidas/logs/synthesis.out",
+    } <= _uploaded_keys(outcome.store)
+    assert (
+        outcome.store.get_bytes(
+            S3Uri.parse(_ARTIFACTS_URI).join("sintese/dashboard.html")
+        )
+        == b"<html></html>\n"
+    )
+    assert _status_hooks(outcome) == [Hook("SetSuccess", ())]
+    assert ("SetMetadata", ("synthesis_status", "ok")) in {
+        (h.method, h.args) for h in outcome.hooks
+    }
+
+    diagnosis = outcome.state.diagnosis
+    assert diagnosis is not None
+    assert diagnosis.rule_id == "cobre.completed"
+
+
+@pytest.mark.timeout(60)
+def test_cobre_scenario_dashboard_failure_keeps_success(
+    fake_slurm: FakeSlurm, tmp_path: Path
+) -> None:
+    outcome = _run_cobre(
+        tmp_path,
+        fake_slurm,
+        Resources("batch", 4, max_cores_per_node=4),
+        _Stub(dashboard_exit=1),
+    )
+
+    assert _status_hooks(outcome) == [Hook("SetSuccess", ())]
+    annotations = _annotations(outcome)
+    assert len(annotations) == 1
+    assert annotations[0].startswith(
+        "SUCCESS: synthesis failed: synthesis tool exited 1; "
+    )
+    assert ("SetMetadata", ("synthesis_status", "failed")) in {
+        (h.method, h.args) for h in outcome.hooks
+    }
+    keys = _uploaded_keys(outcome.store)
+    assert "sintese/dashboard.html" not in keys
+    assert "saidas/logs/synthesis.out" in keys
+
+    run_json = json.loads(
+        outcome.store.get_bytes(
+            S3Uri.parse(_ARTIFACTS_URI).join("saidas/run.json")
+        )
+    )
+    assert run_json["diagnosis"]["rule_id"] == "cobre.completed"
+    assert run_json["diagnosis"]["evidence"][0]["source"] == "synthesis"
