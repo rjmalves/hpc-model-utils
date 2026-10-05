@@ -178,6 +178,17 @@
       "options": []
     },
     {
+      "description": "Diretorio versionado do cobre-bridge, capturado do ensure-utils",
+      "name": "synthesisToolDir",
+      "type": "String",
+      "defaultValue": "",
+      "visible": false,
+      "regexPattern": "HPCMU_TOOL cobre-bridge (/\\S+)",
+      "format": "{1}",
+      "order": 15,
+      "options": []
+    },
+    {
       "description": "Versao do hpc-model-utils a ser utilizada",
       "name": "utilsAppVersion",
       "type": "String",
@@ -185,7 +196,7 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 15,
+      "order": 16,
       "options": []
     },
     {
@@ -196,7 +207,29 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 16,
+      "order": 17,
+      "options": []
+    },
+    {
+      "description": "Versao do cobre-bridge a ser utilizada",
+      "name": "synthesisAppVersion",
+      "type": "String",
+      "defaultValue": "v0.17.0",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 18,
+      "options": []
+    },
+    {
+      "description": "Commit do cobre-bridge fixado junto com a versao",
+      "name": "synthesisAppSha",
+      "type": "String",
+      "defaultValue": "1b059ac505a8d57b6549c0a60411c41a9d7167cb",
+      "visible": false,
+      "regexPattern": "",
+      "format": "",
+      "order": 19,
       "options": []
     },
     {
@@ -207,7 +240,7 @@
       "visible": false,
       "regexPattern": "",
       "format": "",
-      "order": 17,
+      "order": 20,
       "options": []
     },
     {
@@ -218,7 +251,7 @@
       "visible": true,
       "regexPattern": "",
       "format": "",
-      "order": 18,
+      "order": 21,
       "options": []
     }
   ],

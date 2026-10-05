@@ -30,6 +30,8 @@ from tests.deploy.test_task_script_idiom import (
     _BASH_STUB,
     CAPTURED,
     ENSURE_PYTHON,
+    ENSURE_SYNTHESIS_SHA,
+    ENSURE_SYNTHESIS_TAG,
     ENSURE_UTILS_SHA,
     ENSURE_UTILS_TAG,
     Call,
@@ -90,12 +92,17 @@ PARAMETER_NAMES = (
     "path",
     "jobId",
     "utilsToolDir",
+    "synthesisToolDir",
     "utilsAppVersion",
     "utilsAppSha",
+    "synthesisAppVersion",
+    "synthesisAppSha",
     "versionsBucket",
     "jobTimeoutHours",
 )
 UTILS_TAG = "v2.1.0"
+BRIDGE_TAG = "v0.17.0"
+BRIDGE_SHA = "1b059ac505a8d57b6549c0a60411c41a9d7167cb"
 UPLOAD_WORKFLOW = "workflows/upload-versao.json"
 UPLOAD_MODEL_OPTIONS = ["newave", "decomp", "cobre"]
 UPLOAD_CLI_TAG = "v1.1.0"
@@ -138,6 +145,14 @@ SHAPES: dict[str, tuple[str, str, bool, str, str, list[str]]] = {
         "{1}",
         [],
     ),
+    "synthesisToolDir": (
+        "String",
+        "",
+        False,
+        r"HPCMU_TOOL cobre-bridge (/\S+)",
+        "{1}",
+        [],
+    ),
     "versionsBucket": ("String", "@@env:versionsBucket@@", False, "", "", []),
     "jobTimeoutHours": ("Int", "8", True, "", "", []),
 }
@@ -160,6 +175,8 @@ ENSURE_EXEC = (
     " --python '3.12.13' --tool hpc-model-utils"
     " https://github.com/rjmalves/hpc-model-utils.git"
     ' "$UTILS_TAG" "$UTILS_SHA" hpc-model-utils'
+    " --tool cobre-bridge https://github.com/cobre-rs/cobre-bridge.git"
+    ' "$SYNTHESIS_TAG" "$SYNTHESIS_SHA" cobre-bridge'
     " <<'HPCMU_ENSURE_TOOLS_EOF'"
 )
 
@@ -285,7 +302,16 @@ def check_pins(root: Path) -> list[str]:
         errors.append(f"{WORKFLOW}: utilsAppVersion is not {UTILS_TAG}")
     if not SHA.fullmatch(sha):
         errors.append(f"{WORKFLOW}: utilsAppSha is not 40 hex")
-    for name in ("utilsAppVersion", "utilsAppSha"):
+    if params.get("synthesisAppVersion", {}).get("defaultValue") != BRIDGE_TAG:
+        errors.append(f"{WORKFLOW}: synthesisAppVersion is not {BRIDGE_TAG}")
+    if params.get("synthesisAppSha", {}).get("defaultValue") != BRIDGE_SHA:
+        errors.append(f"{WORKFLOW}: synthesisAppSha is not {BRIDGE_SHA}")
+    for name in (
+        "utilsAppVersion",
+        "utilsAppSha",
+        "synthesisAppVersion",
+        "synthesisAppSha",
+    ):
         param = params.get(name, {})
         shape = (
             param.get("type"),
@@ -296,11 +322,6 @@ def check_pins(root: Path) -> list[str]:
         )
         if shape != PIN_SHAPE:
             errors.append(f"{WORKFLOW}: parameter {name} has the wrong shape")
-    errors += [
-        f"{WORKFLOW}: parameter {name} is a synthesis parameter"
-        for name in params
-        if name.startswith("synthesis")
-    ]
     return errors
 
 
@@ -331,7 +352,7 @@ def check_ensure_utils(root: Path) -> list[str]:
     ]:
         errors.append(f"{ENSURE_SCRIPT}: the final three lines differ")
     text = "\n".join(lines)
-    if "{{modelName}}" in text or "synthesis" in text.casefold():
+    if "{{modelName}}" in text:
         errors.append(f"{ENSURE_SCRIPT}: the script is not model-agnostic")
     if "sintetizador" in text:
         errors.append(f"{ENSURE_SCRIPT}: the script installs a sintetizador")
@@ -454,20 +475,10 @@ def _newave_mpich_default(doc: dict[str, Any]) -> None:
     _parameter(doc, "mpichPath")["defaultValue"] = "@@env:mpichPath@@"
 
 
-def _add_synthesis_parameter(doc: dict[str, Any]) -> None:
-    doc["parameters"].append(
-        {
-            "description": "x",
-            "name": "synthesisToolDir",
-            "type": "String",
-            "defaultValue": "",
-            "visible": False,
-            "regexPattern": "",
-            "format": "",
-            "order": len(doc["parameters"]),
-            "options": [],
-        }
-    )
+def _drop_synthesis_tool_dir(doc: dict[str, Any]) -> None:
+    doc["parameters"] = [
+        p for p in doc["parameters"] if p["name"] != "synthesisToolDir"
+    ]
 
 
 def _gap_in_order(doc: dict[str, Any]) -> None:
@@ -492,6 +503,14 @@ def _short_sha(doc: dict[str, Any]) -> None:
 
 def _visible_sha(doc: dict[str, Any]) -> None:
     _parameter(doc, "utilsAppSha")["visible"] = True
+
+
+def _branch_bridge_tag(doc: dict[str, Any]) -> None:
+    _parameter(doc, "synthesisAppVersion")["defaultValue"] = "main"
+
+
+def _short_bridge_sha(doc: dict[str, Any]) -> None:
+    _parameter(doc, "synthesisAppSha")["defaultValue"] = BRIDGE_SHA[:39]
 
 
 def test_check_chain_real_tree_reports_nothing() -> None:
@@ -549,7 +568,7 @@ def test_check_parameters_real_tree_reports_nothing() -> None:
         ),
         (_newave_mpich_default, r"parameter mpichPath has the wrong shape"),
         (_newave_mpich_default, r"references the NEWAVE/DECOMP mpichPath"),
-        (_add_synthesis_parameter, r"parameter names differ"),
+        (_drop_synthesis_tool_dir, r"parameter names differ"),
         (_gap_in_order, r"parameter order is not contiguous"),
         (
             _wrong_model_version_options,
@@ -577,10 +596,8 @@ def test_check_pins_real_tree_reports_nothing() -> None:
         (_branch_tag, r"utilsAppVersion is not v2\.1\.0"),
         (_short_sha, r"utilsAppSha is not 40 hex"),
         (_visible_sha, r"parameter utilsAppSha has the wrong shape"),
-        (
-            _add_synthesis_parameter,
-            r"synthesisToolDir is a synthesis parameter",
-        ),
+        (_branch_bridge_tag, r"synthesisAppVersion is not v0\.17\.0"),
+        (_short_bridge_sha, rf"synthesisAppSha is not {BRIDGE_SHA}"),
     ],
 )
 def test_check_pins_mutated_copy_is_reported(
@@ -645,8 +662,8 @@ def test_check_ensure_utils_real_tree_reports_nothing() -> None:
     ("old", "new", "message"),
     [
         (
-            "hpc-model-utils <<",
-            "hpc-model-utils --tool sintetizador-newave <<",
+            "cobre-bridge <<",
+            "cobre-bridge --tool sintetizador-newave <<",
             r"the final three lines differ",
         ),
         (
@@ -857,6 +874,12 @@ def test_ensure_utils_hands_bash_the_utils_arguments_and_the_script(
         ENSURE_UTILS_TAG,
         ENSURE_UTILS_SHA,
         "hpc-model-utils",
+        "--tool",
+        "cobre-bridge",
+        "https://github.com/cobre-rs/cobre-bridge.git",
+        ENSURE_SYNTHESIS_TAG,
+        ENSURE_SYNTHESIS_SHA,
+        "cobre-bridge",
     ]
     assert not any("sintetizador" in item.decode() for item in argv)
     script = (MODELOPS / "scripts" / "ensure-tools.sh").read_text("utf-8")
@@ -864,19 +887,21 @@ def test_ensure_utils_hands_bash_the_utils_arguments_and_the_script(
     assert stdin == script + "\n"
 
 
-def test_ensure_utils_cache_hit_prints_one_tool_line_and_runs_nothing(
+def test_ensure_utils_cache_hit_prints_two_tool_lines_and_runs_nothing(
     ensure_sandbox: EnsureSandbox,
 ) -> None:
     ensure_sandbox.install("hpc-model-utils", ENSURE_UTILS_SHA)
+    ensure_sandbox.install("cobre-bridge", ENSURE_SYNTHESIS_SHA)
 
     result = _run_ensure(ensure_sandbox, slug="ensure-utils")
 
     assert (result.returncode, result.stdout, result.stderr) == (
         0,
-        ensure_sandbox.tool_line("hpc-model-utils", ENSURE_UTILS_SHA),
+        ensure_sandbox.tool_line("hpc-model-utils", ENSURE_UTILS_SHA)
+        + ensure_sandbox.tool_line("cobre-bridge", ENSURE_SYNTHESIS_SHA),
         "",
     )
-    assert result.stdout.count("HPCMU_TOOL ") == 1
+    assert result.stdout.count("HPCMU_TOOL ") == 2
     assert ensure_sandbox.recorded() == []
 
 
@@ -884,13 +909,14 @@ def test_ensure_utils_ignores_the_model_name(
     ensure_sandbox: EnsureSandbox,
 ) -> None:
     ensure_sandbox.install("hpc-model-utils", ENSURE_UTILS_SHA)
+    ensure_sandbox.install("cobre-bridge", ENSURE_SYNTHESIS_SHA)
 
     result = _run_ensure(ensure_sandbox, model="cobre", slug="ensure-utils")
 
     assert result.returncode == 0
     assert result.stdout == ensure_sandbox.tool_line(
         "hpc-model-utils", ENSURE_UTILS_SHA
-    )
+    ) + ensure_sandbox.tool_line("cobre-bridge", ENSURE_SYNTHESIS_SHA)
 
 
 @pytest.mark.parametrize("parameter", CAPTURED["ensure-utils"])
@@ -922,6 +948,8 @@ def test_ensure_utils_forged_terminator_is_rejected(
         ("utilsAppVersion", "v2.1"),
         ("utilsAppSha", "A" * 40),
         ("utilsAppSha", "a" * 39),
+        ("synthesisAppVersion", "main"),
+        ("synthesisAppSha", "a" * 39),
     ],
 )
 def test_ensure_utils_invalid_value_is_rejected(

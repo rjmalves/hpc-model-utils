@@ -147,7 +147,12 @@ CAPTURED: dict[str, tuple[str, ...]] = {
         "utilsAppSha",
         "synthesisAppSha",
     ),
-    "ensure-utils": ("utilsAppVersion", "utilsAppSha"),
+    "ensure-utils": (
+        "utilsAppVersion",
+        "synthesisAppVersion",
+        "utilsAppSha",
+        "synthesisAppSha",
+    ),
     "cobre-run": (
         *_BASE,
         "queue",
@@ -997,14 +1002,14 @@ TASK_DOCUMENTS: dict[str, dict[str, Any]] = {
         "observation": "Instala ou reutiliza instalacoes imutaveis de ferramentas, uma por commit",
     },
     "ensure-utils": {
-        "taskName": "Garante hpc-model-utils versionado",
-        "description": "Instala ou reutiliza a instalacao imutavel do hpc-model-utils, uma por commit",
+        "taskName": "Garante hpc-model-utils e cobre-bridge versionados",
+        "description": "Instala ou reutiliza as instalacoes imutaveis do hpc-model-utils e do cobre-bridge, uma por commit",
         "scriptType": "BASH",
         "tags": [],
         "parameters": [],
         "version": "2.1.0",
         "hidden": False,
-        "observation": "Instala ou reutiliza a instalacao imutavel do hpc-model-utils, uma por commit",
+        "observation": "Instala ou reutiliza as instalacoes imutaveis do hpc-model-utils e do cobre-bridge, uma por commit",
     },
     "cobre-run": {
         "taskName": "Executa e acompanha cobre no SLURM",
