@@ -193,13 +193,24 @@ def test_find_platform_identifiers_astral_digit_between_words_returns_canonical_
 
 @pytest.mark.parametrize(
     "name",
-    ["utilsAppSha", "synthesisAppSha", "utilsToolDir", "synthesisToolDir"],
+    [
+        "utilsAppSha",
+        "synthesisAppSha",
+        "utilsToolDir",
+        "synthesisToolDir",
+        "maxCoresPerNode",
+    ],
 )
 def test_find_platform_identifiers_v2_parameter_name_returns_canonical_name(
     name: str,
 ) -> None:
     assert name in PLATFORM_IDENTIFIERS
     assert find_platform_identifiers(name.lower()) == [name]
+
+
+def test_csharp_literal_cobre_parameter_name_breaks_with_word_joiner() -> None:
+    expected = '"x m' + _WORD_JOINER + 'axCoresPerNode y"'
+    assert csharp_literal("x maxCoresPerNode y", None) == expected
 
 
 # ---------------------------------------------------------------------------

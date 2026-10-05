@@ -1,5 +1,5 @@
 {
-  "taskName": "Cria diretorio temporario para execucao (v2)",
+  "taskName": "Cria diretorio temporario para execucao",
   "description": "Cria diretorio temporario para execucao de modelo",
   "scriptType": "BASH",
   "tags": [],

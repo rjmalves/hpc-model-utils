@@ -1,15 +1,14 @@
-"""ticket-064 structure contract for the [v2] workflow copies (ADR-047).
+"""ticket-064/067 structure contract for the v2 original workflows (ADR-047).
 
-Each ``check_*`` function takes the ``deploy/modelops`` directory so a mutated
-copy in ``tmp_path`` is checked the same way as the real tree. The expected
-values are constants here, so the test does not read the v1 workflow files
-except to prove they are untouched (ticket-067 replaces that assertion with
-the parity test).
+The ticket-067 switch gave the three originals the content of their [v2]
+copies, so the checks below run on ``workflows/<slug>.json``. Each ``check_*``
+function takes the ``deploy/modelops`` directory so a mutated copy in
+``tmp_path`` is checked the same way as the real tree. The expected values are
+constants here; with the copies gone there is nothing to compare them with.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import shutil
@@ -109,7 +108,7 @@ PARAMETER_NAMES = {
     ),
 }
 
-UTILS_TAG = "v2.0.1"
+UTILS_TAG = "v2.0.2"
 TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
 SHA = re.compile(r"[0-9a-f]{40}")
 TASK_TOKEN = re.compile(r"@@task:([a-z0-9][a-z0-9-]*)@@")
@@ -117,17 +116,10 @@ UUID4 = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
 
-# sha256 of each v1 original as ticket-061 committed it (128cfa6).
-V1_SHA256 = {
-    "newave-pem": (
-        "3b8baa04b3a4ec38c6c5b9ef6fb07cc494c71dd5301a061a51dff22d6c99b4b5"
-    ),
-    "decomp-pem": (
-        "d23fbb72e25e3c2575d107d44583b8e7070cc1eba197c3783845eeb1d390c84b"
-    ),
-    "upload-newave": (
-        "0701147eaa464cffd8f90c98ffdc722d3870a6d5efb832387a36b69665bf84fb"
-    ),
+WORKFLOW_NAMES = {
+    "newave-pem": "NEWAVE - PEM",
+    "decomp-pem": "DECOMP - PEM",
+    "upload-newave": "Upload NEWAVE",
 }
 
 
@@ -136,7 +128,7 @@ def _load(path: Path) -> Any:
 
 
 def _rel(slug: str) -> str:
-    return f"workflows/{slug}-v2.json"
+    return f"workflows/{slug}.json"
 
 
 def _params(doc: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -270,7 +262,7 @@ def check_pins(root: Path) -> list[str]:
             if shape != ("String", False, "", "", []):
                 errors.append(f"{rel}: parameter {name} has the wrong shape")
     if len(utils_shas) > 1:
-        errors.append("utilsAppSha differs across the [v2] workflows")
+        errors.append("utilsAppSha differs across the workflows")
     return errors
 
 
@@ -299,14 +291,13 @@ def check_dynamic_parameters(root: Path) -> list[str]:
     return errors
 
 
-def check_isolation(root: Path) -> list[str]:
+def check_names(root: Path) -> list[str]:
     return [
-        f"workflows/{slug}.json: differs from the ticket-061 original"
-        for slug, digest in V1_SHA256.items()
-        if hashlib.sha256(
-            (root / "workflows" / f"{slug}.json").read_bytes()
-        ).hexdigest()
-        != digest
+        f"{_rel(slug)}: workflowName is {name!r}, expected"
+        f" {WORKFLOW_NAMES[slug]!r}"
+        for slug in SLUGS
+        if (name := _load(root / _rel(slug))["workflowName"])
+        != WORKFLOW_NAMES[slug]
     ]
 
 
@@ -326,6 +317,13 @@ def _rewrite(path: Path, change: Callable[[dict[str, Any]], None]) -> None:
 
 def _mutate(root: Path, change: Callable[[dict[str, Any]], None]) -> None:
     _rewrite(root / _rel("newave-pem"), change)
+
+
+def _set_workflow_name(name: str) -> Callable[[dict[str, Any]], None]:
+    def change(doc: dict[str, Any]) -> None:
+        doc["workflowName"] = name
+
+    return change
 
 
 def _set_default(name: str, value: str) -> Callable[[dict[str, Any]], None]:
@@ -493,28 +491,28 @@ def test_check_dynamic_parameters_wrong_model_is_reported(tree: Path) -> None:
         require(check_dynamic_parameters(tree))
 
 
-def test_check_isolation_real_tree_reports_nothing() -> None:
-    require(check_isolation(MODELOPS))
+def test_check_names_real_tree_reports_nothing() -> None:
+    require(check_names(MODELOPS))
 
 
-def test_check_isolation_edited_original_is_reported(tree: Path) -> None:
-    original = tree / "workflows" / "decomp-pem.json"
-    original.write_text(
-        original.read_text(encoding="utf-8").replace("0.0.1", "0.0.2"),
-        encoding="utf-8",
-    )
+def test_check_names_restored_v2_suffix_is_reported(tree: Path) -> None:
+    _mutate(tree, _set_workflow_name("NEWAVE - PEM [v2]"))
 
     with pytest.raises(
-        AssertionError, match=r"decomp-pem.json: differs from the ticket-061"
+        AssertionError,
+        match=re.escape(
+            "workflows/newave-pem.json: workflowName is 'NEWAVE - PEM [v2]',"
+            " expected 'NEWAVE - PEM'"
+        ),
     ):
-        require(check_isolation(tree))
+        require(check_names(tree))
 
 
 @pytest.mark.parametrize("slug", SLUGS)
 def test_v2_workflow_renders_with_the_example_env_ids(slug: str) -> None:
     env = load_env(MODELOPS / "env" / "prd.example.json")
 
-    rendered = render_workflow(f"{slug}-v2", MODELOPS, env, {})
+    rendered = render_workflow(slug, MODELOPS, env, {})
 
     assert sorted(n["taskId"] for n in rendered["workflowTasks"]) == sorted(
         env.tasks[task] for task in CHAINS[slug]

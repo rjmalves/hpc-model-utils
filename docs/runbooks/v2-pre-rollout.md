@@ -1,5 +1,10 @@
 # Runbook: v2 pre-rollout validation on the [v2] copies
 
+**Status.** The [v2] copies this runbook validated were retired at the
+ticket-067 switch: the original workflows now carry their content, and
+`docs/runbooks/v2-switch.md` is the live procedure. P1-P4 below remain the
+procedures the switch runbook reuses, run against the originals.
+
 This runbook is the R133 gate (ADR-047) between applying the [v2] workflow
 copies (`NEWAVE - PEM [v2]`, `DECOMP - PEM [v2]`, `Upload NEWAVE [v2]`) and
 switching the original workflows to v2. The original workflows stay on their

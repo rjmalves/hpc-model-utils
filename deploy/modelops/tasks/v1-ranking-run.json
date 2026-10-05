@@ -1,0 +1,10 @@
+{
+  "taskName": "Executa e acompanha ranqueamento no SLURM",
+  "description": "Executa o modelo através da submissão de um job ao SLURM e acompanha",
+  "scriptType": "BASH",
+  "tags": [],
+  "parameters": [],
+  "version": "0.0.1",
+  "hidden": false,
+  "observation": "Executa o modelo através da submissão de um job ao SLURM e acompanha a execução"
+}

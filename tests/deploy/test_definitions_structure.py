@@ -150,11 +150,10 @@ def require(errors: list[str]) -> None:
 
 def check_placeholder_fields(root: Path) -> list[str]:
     errors: list[str] = []
-    placeholder = re.compile(rf"@@env:{_ENV_NAME}@@")
     for path in _glob(root, "workflows/*.json"):
         rel = _rel(root, path)
         doc = _load(path)
-        if not placeholder.fullmatch(doc.get("sshConnectionId") or ""):
+        if not ENV_TOKEN.fullmatch(doc.get("sshConnectionId") or ""):
             errors.append(f"{rel}: sshConnectionId is not an @@env:@@ token")
         for param in doc["parameters"]:
             if param["name"] not in PLACEHOLDER_PARAMS:
@@ -163,7 +162,7 @@ def check_placeholder_fields(root: Path) -> list[str]:
             if param["name"] == "queue":
                 fields += [("options", option) for option in param["options"]]
             for field, value in fields:
-                if not placeholder.fullmatch(value):
+                if not ENV_TOKEN.fullmatch(value):
                     errors.append(
                         f"{rel}: parameter {param['name']} {field} is not"
                         " an @@env:@@ token"

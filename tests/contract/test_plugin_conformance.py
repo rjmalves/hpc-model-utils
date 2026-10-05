@@ -34,9 +34,18 @@ from hpc_model_utils.core.plugin import ExecutableSpec, ModelPlugin
 from hpc_model_utils.core.state import StudyInfo
 from hpc_model_utils.core.workspace import Workspace
 from hpc_model_utils.models import PLUGINS, get_plugin
+from tests.support.cobre_case import cobre_workspace, write_elf_stub
 from tests.support.decks import decomp_workspace, newave_workspace
 
+
+def _cobre_conformance_workspace(p: Path) -> Workspace:
+    ws = cobre_workspace(p).ws
+    write_elf_stub(ws.assets)
+    return ws
+
+
 CONFORMANCE_WORKSPACES: Mapping[str, Callable[[Path], Workspace]] = {
+    "cobre": _cobre_conformance_workspace,
     "decomp": lambda p: decomp_workspace(p).ws,
     "newave": lambda p: newave_workspace(p).ws,
 }

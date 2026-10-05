@@ -1,5 +1,5 @@
 {
-  "taskName": "Upload das saidas do modelo para o S3 (v2)",
+  "taskName": "Upload das saidas do modelo para o S3",
   "description": "Upload das saidas do modelo para o S3",
   "scriptType": "BASH",
   "tags": [],

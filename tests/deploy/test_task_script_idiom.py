@@ -23,10 +23,18 @@ import tempfile
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from deploy.modelops.render import load_env, render_task
+from tests.support.script_harness import (
+    EXECUTION_HASH,
+    EXECUTION_ID,
+    EXECUTION_ID_PARAMETER,
+    SHA,
+    prepare_command,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODELOPS = REPO_ROOT / "deploy" / "modelops"
@@ -52,7 +60,6 @@ AWS_SLUGS = frozenset(
     {"fetch-executables", "fetch-inputs", "result-upload", "ingest-offline"}
 )
 
-EXECUTION_ID_PARAMETER = "CurrentExecution.ExecutionId"
 PARAMETER_VARIABLES = {
     "modelName": "MODEL",
     "rootPath": "ROOT_PATH",
@@ -196,14 +203,15 @@ _FORBIDDEN: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
-def _is_validation(line: str) -> bool:
-    match = _VALIDATION.fullmatch(line)
-    return match is not None and not _UNSAFE_VALIDATION.search(match.group(1))
-
-
 def _validation_message(line: str) -> str | None:
     match = _VALIDATION.fullmatch(line)
-    return match.group(2) if match and _is_validation(line) else None
+    if match is None or _UNSAFE_VALIDATION.search(match.group(1)):
+        return None
+    return match.group(2)
+
+
+def _is_validation(line: str) -> bool:
+    return _validation_message(line) is not None
 
 
 def _refers_to(line: str, variable: str) -> bool:
@@ -445,11 +453,18 @@ def test_lint_covers_exactly_the_ten_v2_scripts_and_ensure_tools() -> None:
 
 def test_lint_v1_baseline_is_not_checked(tasks: Path) -> None:
     for path in tasks.glob("*.sh"):
-        if path.stem not in ("extract-sanitize", "v1-run", "v1-remove-workdir"):
+        if path.stem not in (
+            "extract-sanitize",
+            "v1-clone-simulprospec",
+            "v1-upload-version",
+        ):
             path.unlink()
 
     require(check_scripts(tasks))
-    assert lint_script("v1-run", (tasks / "v1-run.sh").read_text("utf-8"))
+    assert lint_script(
+        "v1-clone-simulprospec",
+        (tasks / "v1-clone-simulprospec.sh").read_text("utf-8"),
+    )
 
 
 def test_lint_without_a_v2_script_is_an_error(tasks: Path) -> None:
@@ -855,36 +870,128 @@ def test_scripts_pass_bash_syntax_check(slug: str) -> None:
     assert (result.returncode, result.stderr) == (0, "")
 
 
-@pytest.mark.parametrize("slug", SLUGS)
-def test_task_documents_follow_the_v1_documents(slug: str) -> None:
-    v1 = json.loads((TASKS / f"v1-{slug}.json").read_text(encoding="utf-8"))
-    v2 = json.loads((TASKS / f"{slug}.json").read_text(encoding="utf-8"))
-
-    assert v2 == {
-        "taskName": f"{v1['taskName']} (v2)",
-        "description": v1["description"],
+TASK_DOCUMENTS: dict[str, dict[str, Any]] = {
+    "create-workdir": {
+        "taskName": "Cria diretorio temporario para execucao",
+        "description": "Cria diretorio temporario para execucao de modelo",
         "scriptType": "BASH",
         "tags": [],
         "parameters": [],
         "version": "2.0.0",
         "hidden": False,
-        "observation": v1["observation"],
-    }
+        "observation": "Cria diretório temporário para execução de modelo",
+    },
+    "fetch-executables": {
+        "taskName": "Obtem executaveis dos modelos do S3",
+        "description": "Obtem executaveis dos modelos do S3",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Obtem executaveis dos modelos do S3",
+    },
+    "fetch-inputs": {
+        "taskName": "Obtem dados de entrada do S3",
+        "description": "Copia os dados de entrada do S3 para o diretorio de execucao",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Copia os dados de entrada do S3 para o diretorio de execucao",
+    },
+    "extract-sanitize": {
+        "taskName": "Extrai e trata encoding dos dados de entrada do modelo",
+        "description": "Extrai e trata encoding dos dados de entrada do modelo",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Extrai e trata encoding dos dados de entrada do modelo",
+    },
+    "preprocess": {
+        "taskName": "Preprocessamento especifico do modelo",
+        "description": "Preprocessamento especifico do modelo",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Preprocessamento especifico do modelo",
+    },
+    "run": {
+        "taskName": "Executa e acompanha modelo no SLURM",
+        "description": "Executa o modelo através da submissão de um job ao SLURM e acompanha a",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Executa o modelo através da submissão de um job ao SLURM e acompanha a execução",
+    },
+    "result-upload": {
+        "taskName": "Upload das saidas do modelo para o S3",
+        "description": "Upload das saidas do modelo para o S3",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Upload das saidas do modelo para o S3",
+    },
+    "remove-workdir": {
+        "taskName": "Remove diretorio temporario da execucao",
+        "description": "Remove diretorio temporario da execucao",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Remove diretorio temporario da execucao",
+    },
+    "cancel-run": {
+        "taskName": "Cancela job submetido na fila do SLURM",
+        "description": "Cancela um job que foi submetido à fila do SLURM para uma rodada",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Cancela um job que foi submetido à fila do SLURM para uma rodada",
+    },
+    "ingest-offline": {
+        "taskName": "Obtem dados de rodada para upload do S3",
+        "description": "Obtem dados de rodada para upload do S3",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Obtem dados de rodada para upload do S3",
+    },
+    "ensure-tools": {
+        "taskName": "Garante ferramentas versionadas",
+        "description": "Instala ou reutiliza instalacoes imutaveis de ferramentas, uma por commit",
+        "scriptType": "BASH",
+        "tags": [],
+        "parameters": [],
+        "version": "2.0.0",
+        "hidden": False,
+        "observation": "Instala ou reutiliza instalacoes imutaveis de ferramentas, uma por commit",
+    },
+}
 
 
-_REFERENCE_NAMES = re.compile(r"\{\{(.*?)\}\}")
+@pytest.mark.parametrize("slug", [*SLUGS, ENSURE_SLUG])
+def test_task_documents_carry_the_switch_names(slug: str) -> None:
+    document = json.loads((TASKS / f"{slug}.json").read_text(encoding="utf-8"))
+
+    assert document == TASK_DOCUMENTS[slug]
+
+
 _ENV_TOKEN = re.compile(r"@@env:([A-Za-z][A-Za-z0-9]*)@@")
-
-
-def _prepare_command(script: str, values: Mapping[str, str]) -> str:
-    """Emulate WorkflowExecutionService.PrepareCommand.
-
-    Each distinct ``{{name}}`` is replaced everywhere, in order of first
-    appearance in the original script; an unknown name becomes "".
-    """
-    for name in dict.fromkeys(_REFERENCE_NAMES.findall(script)):
-        script = script.replace("{{" + name + "}}", values.get(name, ""))
-    return script
 
 
 def _render_env(text: str, env: Mapping[str, str]) -> str:
@@ -894,18 +1001,18 @@ def _render_env(text: str, env: Mapping[str, str]) -> str:
 def test_prepare_command_replaces_each_name_everywhere() -> None:
     script = "{{a}} {{b}} {{a}}"
 
-    assert _prepare_command(script, {"a": "1", "b": "2"}) == "1 2 1"
+    assert prepare_command(script, {"a": "1", "b": "2"}) == "1 2 1"
 
 
 def test_prepare_command_unknown_name_becomes_empty() -> None:
-    assert _prepare_command("x{{unknown}}y", {}) == "xy"
+    assert prepare_command("x{{unknown}}y", {}) == "xy"
 
 
 def test_prepare_command_value_names_expand_only_for_later_names() -> None:
     values = {"a": "{{b}}", "b": "B"}
 
-    assert _prepare_command("{{a}}\n{{b}}", values) == "B\nB"
-    assert _prepare_command("{{b}}\n{{a}}", values) == "B\n{{b}}"
+    assert prepare_command("{{a}}\n{{b}}", values) == "B\nB"
+    assert prepare_command("{{b}}\n{{a}}", values) == "B\n{{b}}"
 
 
 def test_prepare_command_injected_execution_id_stays_literal() -> None:
@@ -913,7 +1020,7 @@ def test_prepare_command_injected_execution_id_stays_literal() -> None:
     script = f"{token}\n{{{{x}}}}\n{token}"
     values = {EXECUTION_ID_PARAMETER: "GUID", "x": f"v\n{token}"}
 
-    assert _prepare_command(script, values) == f"GUID\nv\n{token}\nGUID"
+    assert prepare_command(script, values) == f"GUID\nv\n{token}\nGUID"
 
 
 def test_render_env_replaces_every_token() -> None:
@@ -925,9 +1032,6 @@ def test_render_env_unknown_name_is_an_error() -> None:
         _render_env("@@env:missing@@", {"k": "v"})
 
 
-EXECUTION_ID = "d14629c2-5a1e-4b6f-9c3d-0123456789ab"
-EXECUTION_HASH = "0123456789abcdef" * 4
-SHA = "a" * 40
 EXECUTION_NAME = "PMO Água 'x' \"y\" $z $(id) ${HOME}"
 _SAFE_PATH = re.compile(r"/[A-Za-z0-9._/-]+")
 _STUB = """#!{bash}
@@ -1045,7 +1149,7 @@ def _run(
     wrapped: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     values = {**sandbox.values(model), **(overrides or {})}
-    script = _prepare_command(
+    script = prepare_command(
         _render_env((TASKS / f"{slug}.sh").read_text("utf-8"), sandbox.env),
         values,
     )
@@ -1489,7 +1593,7 @@ def test_behavior_execution_id_is_validated_before_any_capture(
 
 
 ENSURE_PYTHON = "3.12.13"
-ENSURE_UTILS_TAG = "v2.0.1"
+ENSURE_UTILS_TAG = "v2.0.2"
 ENSURE_UTILS_SHA = "a" * 40
 ENSURE_SYNTHESIS_TAG = "v2.4.5"
 ENSURE_SYNTHESIS_SHA = "b" * 40
@@ -1595,7 +1699,7 @@ def _run_ensure(
     model: str = "newave",
 ) -> subprocess.CompletedProcess[str]:
     task = render_task(ENSURE_SLUG, MODELOPS, load_env(sandbox.env_file))
-    script = _prepare_command(
+    script = prepare_command(
         task["script"], {**sandbox.values(model), **(overrides or {})}
     )
     return subprocess.run(
