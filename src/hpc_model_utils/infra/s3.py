@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, TypeVar
 
 import boto3
+from boto3.exceptions import Boto3Error
 from botocore.exceptions import BotoCoreError, ClientError
 
 from hpc_model_utils.infra.errors import (
@@ -142,12 +143,11 @@ class Boto3ObjectStore(ObjectStore):
         )
 
     def _get_object_bytes(self, op: str, uri: S3Uri) -> bytes:
-        response = self._call(
-            op,
-            uri,
-            lambda: self._client.get_object(Bucket=uri.bucket, Key=uri.key),
-        )
-        return response["Body"].read()
+        def _read() -> bytes:
+            response = self._client.get_object(Bucket=uri.bucket, Key=uri.key)
+            return response["Body"].read()
+
+        return self._call(op, uri, _read)
 
     def _download_to_path(self, op: str, uri: S3Uri, dest: Path) -> Path:
         tmp = dest.parent / f".{dest.name}.part"
@@ -178,4 +178,6 @@ class Boto3ObjectStore(ObjectStore):
                 raise ObjectNotFoundError(str(uri)) from err
             raise StorageBackendError(f"{op} {uri}: {code}") from err
         except BotoCoreError as err:
+            raise StorageBackendError(f"{op} {uri}: {err}") from err
+        except Boto3Error as err:
             raise StorageBackendError(f"{op} {uri}: {err}") from err
