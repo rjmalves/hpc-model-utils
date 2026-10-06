@@ -55,6 +55,11 @@ _STATUS_AND_ANNOTATION_HOOKS = frozenset(
         "SetAnnotation",
     }
 )
+_FAST_POLLING_ENV = {
+    "HPCMU_POLL_INTERVAL": "0.02",
+    "HPCMU_SETTLE_WINDOW": "0.05",
+    "HPCMU_CANCEL_TIMEOUT": "5",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -198,11 +203,7 @@ def test_engine_run_sigterm_exits_143_cancels_both_jobs(
         shim,
         ws,
         fake_slurm.bin_dir,
-        env_overrides={
-            "HPCMU_POLL_INTERVAL": "0.02",
-            "HPCMU_SETTLE_WINDOW": "0.05",
-            "HPCMU_CANCEL_TIMEOUT": "5",
-        },
+        env_overrides=_FAST_POLLING_ENV,
     )
     try:
         _wait_until(lambda: len(fake_slurm.submitted()) >= 2)
@@ -240,11 +241,7 @@ def test_engine_run_sighup_exits_129_cancels_both_jobs(
         shim,
         ws,
         fake_slurm.bin_dir,
-        env_overrides={
-            "HPCMU_POLL_INTERVAL": "0.02",
-            "HPCMU_SETTLE_WINDOW": "0.05",
-            "HPCMU_CANCEL_TIMEOUT": "5",
-        },
+        env_overrides=_FAST_POLLING_ENV,
     )
     try:
         _wait_until(lambda: len(fake_slurm.submitted()) >= 2)
@@ -283,11 +280,7 @@ def test_engine_run_closed_stdout_pipe_exits_141_cancels_both_jobs(
         shim,
         ws,
         fake_slurm.bin_dir,
-        env_overrides={
-            "HPCMU_POLL_INTERVAL": "0.02",
-            "HPCMU_SETTLE_WINDOW": "0.05",
-            "HPCMU_CANCEL_TIMEOUT": "5",
-        },
+        env_overrides=_FAST_POLLING_ENV,
     )
     try:
         _wait_until(lambda: len(fake_slurm.submitted()) >= 2)
@@ -331,7 +324,7 @@ def test_engine_run_sigterm_during_blocked_submission_cancels_recorded_job(
         env_overrides={"HPCMU_CANCEL_TIMEOUT": "5"},
     )
     try:
-        _wait_until(lambda: marker.exists())
+        _wait_until(marker.exists)
         proc.send_signal(signal.SIGTERM)
         _, stderr = proc.communicate(timeout=15.0)
     finally:

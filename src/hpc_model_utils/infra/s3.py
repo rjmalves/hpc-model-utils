@@ -177,7 +177,5 @@ class Boto3ObjectStore(ObjectStore):
             if code in _NOT_FOUND_CODES:
                 raise ObjectNotFoundError(str(uri)) from err
             raise StorageBackendError(f"{op} {uri}: {code}") from err
-        except BotoCoreError as err:
-            raise StorageBackendError(f"{op} {uri}: {err}") from err
-        except Boto3Error as err:
+        except (BotoCoreError, Boto3Error) as err:
             raise StorageBackendError(f"{op} {uri}: {err}") from err
