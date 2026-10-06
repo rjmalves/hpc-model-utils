@@ -24,6 +24,9 @@ thread to exercise ticket-041's separate ``cancel()`` path, so handler
 install/restore below is skipped outside the main thread rather than
 raising there; a ``BrokenPipeError`` is still handled regardless of
 thread, since catching it needs no signal call.
+
+An unreadable ``state.json`` or a malformed recorded job id falls
+back to cancelling the ledger ids only.
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ from contextlib import contextmanager
 from types import FrameType
 from typing import TYPE_CHECKING
 
-from hpc_model_utils.core.errors import signal_exit_code
+from hpc_model_utils.core.errors import StateFormatError, signal_exit_code
 from hpc_model_utils.core.state import StateStore
 from hpc_model_utils.infra.errors import SchedulerCommandError
 from hpc_model_utils.infra.slurm import Slurm
@@ -60,6 +63,30 @@ def _raise_terminated(signum: int, frame: FrameType | None) -> None:
     raise Terminated(signum)
 
 
+def _recorded_job_ids(store: StateStore) -> tuple[str, ...]:
+    try:
+        recorded = store.load_optional()
+    except (StateFormatError, OSError):
+        logger.exception(
+            "cancel_on_termination: state.json is unreadable; "
+            "cancelling the in-memory ledger ids only"
+        )
+        return ()
+    return (
+        () if recorded is None else tuple(job.job_id for job in recorded.jobs)
+    )
+
+
+def _cancel(slurm: Slurm, ids: list[str], timeout: float) -> None:
+    try:
+        slurm.cancel(ids)
+        slurm.wait_gone(ids, timeout=timeout)
+    except SchedulerCommandError:
+        logger.exception(
+            "cancel_on_termination: scancel failed for %s", ", ".join(ids)
+        )
+
+
 @contextmanager
 def cancel_on_termination(
     slurm: Slurm, ledger: JobLedger, store: StateStore, *, timeout: float
@@ -75,7 +102,9 @@ def cancel_on_termination(
     raised below still unwinds back out through this generator's own
     ``finally`` before reaching the caller. Off the main thread, no
     handler is installed or restored (see the module docstring); only
-    a ``BrokenPipeError`` can reach the ``except`` below there.
+    a ``BrokenPipeError`` can reach the ``except`` below there. The
+    exit is raised from a ``finally``, so it happens whatever the
+    cleanup raises.
     """
     on_main_thread = threading.current_thread() is threading.main_thread()
     previous = (
@@ -92,30 +121,27 @@ def cancel_on_termination(
         if on_main_thread:
             for sig in _HANDLED_SIGNALS:
                 signal.signal(sig, signal.SIG_IGN)
-        if isinstance(exc, BrokenPipeError):
-            signum: int = signal.SIGPIPE
-            devnull_fd = os.open(os.devnull, os.O_WRONLY)
-            os.dup2(devnull_fd, 1)
-            os.close(devnull_fd)
-        else:
-            signum = exc.signum
-        recorded = store.load_optional()
-        recorded_ids = (
-            ()
-            if recorded is None
-            else tuple(job.job_id for job in recorded.jobs)
+        signum: int = (
+            signal.SIGPIPE if isinstance(exc, BrokenPipeError) else exc.signum
         )
-        ids = dict.fromkeys(ledger.ids + recorded_ids)
-        if ids:
-            try:
-                slurm.cancel(list(ids))
-                slurm.wait_gone(list(ids), timeout=timeout)
-            except SchedulerCommandError:
-                logger.exception(
-                    "cancel_on_termination: scancel failed for %s",
-                    ", ".join(ids),
-                )
-        raise SystemExit(signal_exit_code(signum)) from exc
+        try:
+            if isinstance(exc, BrokenPipeError):
+                devnull_fd = os.open(os.devnull, os.O_WRONLY)
+                os.dup2(devnull_fd, 1)
+                os.close(devnull_fd)
+            ids = list(dict.fromkeys(ledger.ids + _recorded_job_ids(store)))
+            if ids:
+                try:
+                    _cancel(slurm, ids, timeout)
+                except ValueError:
+                    logger.exception(
+                        "cancel_on_termination: state.json holds a malformed "
+                        "job id; cancelling the in-memory ledger ids only"
+                    )
+                    if ledger.ids:
+                        _cancel(slurm, list(ledger.ids), timeout)
+        finally:
+            raise SystemExit(signal_exit_code(signum)) from exc
     finally:
         if on_main_thread:
             for sig, handler in previous.items():

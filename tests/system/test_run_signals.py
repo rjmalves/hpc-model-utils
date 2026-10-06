@@ -15,7 +15,9 @@ process's own stdout.
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -27,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from hpc_model_utils.core.diagnosis import utc_now_iso
+from hpc_model_utils.core.errors import StateFormatError
 from hpc_model_utils.core.lifecycle.finalize import legacy_synthesis_bin
 from hpc_model_utils.core.lifecycle.run import JobLedger
 from hpc_model_utils.core.lifecycle.signals import (
@@ -354,14 +357,17 @@ class _RecordingSlurm(Slurm):
         self.cancel_calls: list[list[str]] = []
         self.wait_gone_calls: list[list[str]] = []
         self.sigterm_during_cancel: object = None
-        self._cancel_error: SchedulerCommandError | None = None
+        self._cancel_error: Exception | None = None
 
-    def raise_on_cancel(self, exc: SchedulerCommandError) -> None:
+    def raise_on_cancel(self, exc: Exception) -> None:
         self._cancel_error = exc
 
     def cancel(self, job_ids: Sequence[str]) -> None:
         self.sigterm_during_cancel = signal.getsignal(signal.SIGTERM)
         self.cancel_calls.append(list(job_ids))
+        for job_id in job_ids:
+            if re.fullmatch(r"\d+", job_id) is None:
+                raise ValueError(f"not a Slurm job id: {job_id!r}")
         if self._cancel_error is not None:
             raise self._cancel_error
 
@@ -526,3 +532,107 @@ def test_cancel_on_termination_swallows_scheduler_command_error_during_cancel(
     assert exc_info.value.code == 143
     assert slurm.cancel_calls == [["1000"]]
     assert slurm.wait_gone_calls == []
+
+
+_SIGNALS_LOGGER = "hpc_model_utils.core.lifecycle.signals"
+
+
+def _error_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [
+        record
+        for record in caplog.records
+        if record.name == _SIGNALS_LOGGER and record.levelno == logging.ERROR
+    ]
+
+
+@pytest.mark.parametrize(
+    ("corrupt", "error_type"),
+    [
+        pytest.param(
+            lambda path: path.write_bytes(b"{not json"),
+            StateFormatError,
+            id="garbage",
+        ),
+        pytest.param(
+            lambda path: path.mkdir(), IsADirectoryError, id="directory"
+        ),
+    ],
+)
+def test_cancel_on_termination_unreadable_state_cancels_ledger_ids_and_exits(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    corrupt: Callable[[Path], object],
+    error_type: type[Exception],
+) -> None:
+    store = _store(tmp_path)
+    store.load_or_create(_PLUGIN.name)
+    state_path = tmp_path / ".hpcmu" / "state.json"
+    state_path.unlink()
+    corrupt(state_path)
+    ledger = JobLedger()
+    ledger.add("1000")
+    ledger.add("1001")
+    slurm = _RecordingSlurm()
+
+    with caplog.at_level(logging.ERROR, logger=_SIGNALS_LOGGER):
+        with pytest.raises(SystemExit) as exc_info:
+            with cancel_on_termination(slurm, ledger, store, timeout=1.0):
+                raise Terminated(signal.SIGTERM)
+
+    assert exc_info.value.code == 143
+    assert slurm.cancel_calls == [["1000", "1001"]]
+    (record,) = _error_records(caplog)
+    assert "state.json is unreadable" in record.getMessage()
+    assert record.exc_info is not None
+    assert record.exc_info[0] is error_type
+
+
+def test_cancel_on_termination_malformed_recorded_id_falls_back_to_ledger_ids(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    store = _store(tmp_path)
+    state = store.load_or_create(_PLUGIN.name)
+    store.save(
+        replace(
+            state,
+            jobs=(
+                JobRecord(Phase.MODEL, "2000", utc_now_iso(), "model.out"),
+                JobRecord(
+                    Phase.FINALIZE, "9001;x", utc_now_iso(), "finalize.out"
+                ),
+            ),
+        )
+    )
+    ledger = JobLedger()
+    ledger.add("1000")
+    slurm = _RecordingSlurm()
+
+    with caplog.at_level(logging.ERROR, logger=_SIGNALS_LOGGER):
+        with pytest.raises(SystemExit) as exc_info:
+            with cancel_on_termination(slurm, ledger, store, timeout=1.0):
+                raise Terminated(signal.SIGTERM)
+
+    assert exc_info.value.code == 143
+    assert slurm.cancel_calls == [["1000", "2000", "9001;x"], ["1000"]]
+    assert slurm.wait_gone_calls == [["1000"]]
+    (record,) = _error_records(caplog)
+    assert "malformed job id" in record.getMessage()
+
+
+def test_cancel_on_termination_unexpected_cancel_error_still_exits(
+    tmp_path: Path,
+) -> None:
+    slurm = _RecordingSlurm()
+    slurm.raise_on_cancel(RuntimeError("boom"))
+    ledger = JobLedger()
+    ledger.add("1000")
+
+    with pytest.raises(SystemExit) as exc_info:
+        with cancel_on_termination(
+            slurm, ledger, _store(tmp_path), timeout=1.0
+        ):
+            raise Terminated(signal.SIGTERM)
+
+    assert exc_info.value.code == 143
+    assert isinstance(exc_info.value.__cause__, Terminated)
+    assert isinstance(exc_info.value.__context__, RuntimeError)
