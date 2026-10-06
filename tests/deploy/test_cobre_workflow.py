@@ -100,7 +100,7 @@ PARAMETER_NAMES = (
     "versionsBucket",
     "jobTimeoutHours",
 )
-UTILS_TAG = "v2.2.0"
+UTILS_TAG = "v2.2.1"
 BRIDGE_TAG = "v0.17.0"
 BRIDGE_SHA = "1b059ac505a8d57b6549c0a60411c41a9d7167cb"
 UPLOAD_WORKFLOW = "workflows/upload-versao.json"
