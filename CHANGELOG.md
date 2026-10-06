@@ -6,7 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## The 2.x series
 
-2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. 2.2.0 tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)), cleans the logs and adds a cobre results dashboard.
+2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. 2.2.0 tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)), cleans the logs and adds a cobre results dashboard. 2.2.1 fixes the reporting of S3 upload and read failures and the cancellation of a terminated run.
+
+## [2.2.1] - 2026-10-06
+
+### Fixed
+
+- An S3 upload rejected inside boto3's transfer manager, and an S3 object read that fails mid-stream, are now storage errors like any other S3 failure: a failed upload of a partly published run writes the `RUNTIME_ERROR` status and reports the artifacts path, and the command exits 4 instead of 99.
+- `run` stopped by SIGTERM or SIGHUP, or by a broken stdout pipe, now cancels its Slurm jobs and exits 128+n even when `.hpcmu/state.json` cannot be read or holds a malformed job id; before, it left the jobs running and exited 99.
+- `deploy/modelops/apply.py snapshot`: a `git` that is missing or times out while checking `--out` now ends with the one-line `apply:` error and exit 2, and the git calls of that check no longer receive `MODELOPS_TOKEN`.
 
 ## [2.2.0] - 2026-10-05
 

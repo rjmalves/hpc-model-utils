@@ -16,10 +16,12 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
 
+from deploy.modelops import apply
 from deploy.modelops.apply import cli
 from deploy.modelops.modelops_api import (
     ModelOpsApiError,
@@ -508,3 +510,74 @@ def test_apply_snapshot_out_guard_ignored_path_writes_all_three_files(
         "tasks.json",
         "workflows.json",
     ]
+
+
+@pytest.mark.parametrize("sub", ["rev-parse", "check-ignore"])
+@pytest.mark.parametrize(
+    "error",
+    [FileNotFoundError("git"), subprocess.TimeoutExpired(["git"], 30)],
+    ids=["missing", "timeout"],
+)
+def test_apply_snapshot_out_guard_git_failure_exits_2_and_makes_no_request(
+    git_repo: Path,
+    fake: FakeModelOpsServer,
+    monkeypatch: pytest.MonkeyPatch,
+    sub: str,
+    error: Exception,
+) -> None:
+    real_run = subprocess.run
+
+    def failing_run(
+        argv: list[str], *args: Any, **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        if argv[:2] == ["git", sub]:
+            raise error
+        return real_run(argv, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", failing_run)
+    out = git_repo / "ignored" / "snapshot"
+
+    result = CliRunner().invoke(
+        cli, ["snapshot", "--out", str(out)], env=_env(fake.url)
+    )
+
+    assert result.exit_code == 2, (result.stderr, result.exception)
+    assert _one_stderr_line(result.stderr).startswith(
+        f"apply: git {sub} failed: "
+    )
+    assert TOKEN not in result.stderr
+    assert not out.exists()
+    assert fake.requests == []
+
+
+def test_apply_snapshot_out_guard_git_calls_are_hardened(
+    git_repo: Path,
+    fake: FakeModelOpsServer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake.workflows = [{"_id": "w1"}]
+    fake.tasks = [{"_id": "t1"}]
+    real_run = subprocess.run
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def recording_run(
+        argv: list[str], *args: Any, **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        if argv[0] == "git":
+            calls.append((argv, kwargs))
+        return real_run(argv, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", recording_run)
+    out = git_repo / "ignored" / "snapshot"
+
+    result = CliRunner().invoke(
+        cli, ["snapshot", "--out", str(out)], env=_env(fake.url)
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert {"rev-parse", "check-ignore"} <= {argv[1] for argv, _ in calls}
+    for _, kwargs in calls:
+        assert kwargs["stdin"] is subprocess.DEVNULL
+        assert "MODELOPS_TOKEN" not in kwargs["env"]
+        assert kwargs["env"]["GIT_OPTIONAL_LOCKS"] == "0"
+        assert kwargs["timeout"] == apply._GIT_TIMEOUT_S

@@ -6,8 +6,13 @@ from pathlib import Path
 
 import boto3
 import pytest
+from boto3.exceptions import S3UploadFailedError
 from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ResponseStreamingError
+from botocore.exceptions import (
+    BotoCoreError,
+    IncompleteReadError,
+    ResponseStreamingError,
+)
 from botocore.response import StreamingBody
 from botocore.stub import Stubber
 from mypy_boto3_s3 import S3Client
@@ -398,6 +403,51 @@ def test_call_botocore_error_maps_to_storage_backend_error(
 
     with pytest.raises(StorageBackendError):
         store._call("op", S3Uri("bucket", "key"), _raise)
+
+
+def test_upload_transfer_failure_raises_storage_backend_error(
+    client: S3Client, stubber: Stubber, tmp_path: Path
+) -> None:
+    src = tmp_path / "output.zip"
+    src.write_bytes(b"compressed output")
+    stubber.add_client_error(
+        "put_object", service_error_code="AccessDenied", http_status_code=403
+    )
+    store = Boto3ObjectStore(client)
+
+    with pytest.raises(
+        StorageBackendError,
+        match=(
+            r"^upload s3://bucket/outputs/result\.zip: "
+            r"Failed to upload .*output\.zip to bucket/outputs/result\.zip: "
+            r"An error occurred \(AccessDenied\)"
+        ),
+    ) as excinfo:
+        store.upload(src, S3Uri("bucket", "outputs/result.zip"))
+
+    assert isinstance(excinfo.value.__cause__, S3UploadFailedError)
+
+
+def test_get_bytes_body_read_error_raises_storage_backend_error(
+    client: S3Client, stubber: Stubber
+) -> None:
+    stubber.add_response(
+        "get_object",
+        {"Body": StreamingBody(BytesIO(b"partial"), 100)},
+        {"Bucket": "bucket", "Key": "config/metadata.json"},
+    )
+    store = Boto3ObjectStore(client)
+
+    with pytest.raises(
+        StorageBackendError,
+        match=(
+            r"^get_bytes s3://bucket/config/metadata\.json: "
+            r"7 read, but total bytes expected is 100\.$"
+        ),
+    ) as excinfo:
+        store.get_bytes(S3Uri("bucket", "config/metadata.json"))
+
+    assert isinstance(excinfo.value.__cause__, IncompleteReadError)
 
 
 def test_exists_any_unreachable_endpoint_raises_storage_backend_error() -> None:

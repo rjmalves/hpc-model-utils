@@ -193,9 +193,7 @@ def fake() -> Iterator[FakeModelOpsServer]:
         yield server
 
 
-def _live(
-    rendered: dict[str, Any], doc_id: str, **extra: Any
-) -> dict[str, Any]:
+def _live(rendered: dict[str, Any], doc_id: str) -> dict[str, Any]:
     live = {k: v for k, v in rendered.items() if k != "timeout"}
     live.update(
         {
@@ -208,7 +206,6 @@ def _live(
             "observation": rendered["observation"] + STAMP,
         }
     )
-    live.update(extra)
     return live
 
 

@@ -321,7 +321,7 @@ def test_run_scenario_a_success_afterany_orders_hooks_and_dependency(
     ids = re.findall(r"Submitted batch job (\d+)", stdout)
     assert ids[-1] == str(finalize_entry["id"])
 
-    hooks: list[Hook] = parse_hooks(stdout)
+    hooks = parse_hooks(stdout)
     relevant = [h for h in hooks if h.method in _RELEVANT_HOOK_METHODS]
     assert [h.method for h in relevant[-2:]] == [
         "SetExecutionArtifactsPath",
@@ -347,7 +347,7 @@ def test_run_scenario_b_model_timeout_publishes_set_runtime_error(
     assert result.state.diagnosis.status is RunStatus.TIMEOUT
     assert result.state.diagnosis.rule_id == "slurm.timeout"
 
-    hooks: list[Hook] = parse_hooks("\n".join(result.protocol))
+    hooks = parse_hooks("\n".join(result.protocol))
     status_hooks = [h for h in hooks if h.method in _STATUS_HOOK_METHODS]
     assert len(status_hooks) == 1
     assert status_hooks[0] == Hook("SetRuntimeError", ())
@@ -575,7 +575,7 @@ def test_run_scenario_i_synthesis_failure_keeps_success(
     assert result.state.diagnosis is not None
     assert result.state.diagnosis.status is RunStatus.SUCCESS
 
-    hooks: list[Hook] = parse_hooks("\n".join(result.protocol))
+    hooks = parse_hooks("\n".join(result.protocol))
     status_hooks = [h for h in hooks if h.method in _STATUS_HOOK_METHODS]
     assert status_hooks == [Hook("SetSuccess", ())]
 

@@ -1,10 +1,9 @@
 """deploy.modelops.apply: the ModelOps operator CLI (ADR-033, R98).
 
-Run as ``uv run python -m deploy.modelops.apply <command>``. Ticket-060a
-added the read-only ``snapshot`` command; ticket-063 added ``sync``, the
-read-only dry run; ticket-063a adds ``sync --apply``, the only write path
-(ADR-033): ``plan()`` computes the dry run, ``execute()`` checks every
-precondition, asks for the typed confirmation and then writes.
+Run as ``uv run python -m deploy.modelops.apply <command>``. ``snapshot``
+is read-only and ``sync`` is a read-only dry run; ``sync --apply`` is the
+only write path (ADR-033): ``plan()`` computes the dry run, ``execute()``
+checks every precondition, asks for the typed confirmation and then writes.
 
 Every command-level failure -- a bad ``--out``, a ``ConfigError`` from
 the environment, an ``EnvFileError`` from ``--env-file``, an
@@ -98,6 +97,26 @@ class ApplyRefused(Exception):
         self.code = code
 
 
+def _git(
+    cwd: Path, *args: str, error: Callable[[str], Exception]
+) -> subprocess.CompletedProcess[str]:
+    env = {k: v for k, v in os.environ.items() if k != "MODELOPS_TOKEN"}
+    env["GIT_OPTIONAL_LOCKS"] = "0"
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_GIT_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise error(f"git {args[0]} failed: {exc}") from exc
+
+
 def _write_snapshot_files(out: Path, files: Mapping[str, Any]) -> None:
     """Write every file's ``.part`` first, then rename all of them, so a
     snapshot is all-or-nothing: a failure at any point removes every
@@ -122,28 +141,14 @@ def _write_snapshot_files(out: Path, files: Mapping[str, Any]) -> None:
 
 
 def _git_toplevel(cwd: Path) -> Path | None:
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
+    result = _git(cwd, "rev-parse", "--show-toplevel", error=OutGuardError)
     if result.returncode != 0:
         return None
     return Path(result.stdout.strip())
 
 
 def _git_check_ignore(cwd: Path, target: Path) -> bool:
-    result = subprocess.run(
-        ["git", "check-ignore", "-q", str(target)],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
+    result = _git(cwd, "check-ignore", "-q", str(target), error=OutGuardError)
     return result.returncode == 0
 
 
@@ -502,21 +507,7 @@ def _sync(
 
 
 def _run_git(cwd: Path, *args: str) -> str:
-    env = {k: v for k, v in os.environ.items() if k != "MODELOPS_TOKEN"}
-    env["GIT_OPTIONAL_LOCKS"] = "0"
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            cwd=cwd,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=_GIT_TIMEOUT_S,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise ApplyRefused(f"git {args[0]} failed: {exc}") from exc
+    result = _git(cwd, *args, error=ApplyRefused)
     if result.returncode != 0:
         reason = " ".join(result.stderr.split())[:200]
         raise ApplyRefused(f"git {args[0]} exit {result.returncode}: {reason}")

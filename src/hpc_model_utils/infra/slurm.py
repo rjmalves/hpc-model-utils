@@ -409,20 +409,14 @@ class Slurm:
         line = non_empty[0]
         left = line.split("|", 2)
         right = left[2].rsplit("|", 2) if len(left) == 3 else []
-        if (
-            len(left) != 3
-            or len(right) != 3
-            or _JOB_ID_RE.fullmatch(left[0]) is None
-            or left[0] != job_id
-        ):
+        if len(left) != 3 or len(right) != 3 or left[0] != job_id:
             raise SchedulerCommandError(
                 f"squeue returned malformed output for job {job_id}: "
                 f"{_truncate(line)}"
             )
         raw_id, raw_state = left[0], left[1]
         reason, raw_time_limit, raw_start = right
-        state_tokens = raw_state.split()
-        state = state_tokens[0] if state_tokens else raw_state
+        state = _first_token(raw_state)
         try:
             time_limit = parse_time_limit(raw_time_limit)
             start_time = parse_slurm_time(raw_start)
