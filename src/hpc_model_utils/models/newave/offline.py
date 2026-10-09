@@ -11,6 +11,11 @@ The ``eco_deck.zip`` echo is rebuilt from the deck's own
 offline deck's original ``caso.dat``. Unlike ``prepare``, there is no
 stale-output purge here (the outputs archive holds this run's real
 outputs) and no title change (the offline study name is preserved).
+
+Only the deck's input files are encoding-sanitized, never the extracted
+outputs: those include multi-GB binaries that ``sanitize_file`` reads
+whole, which exhausts the head node's memory and kills the ingest. A
+cluster run never sanitizes its outputs either.
 """
 
 from __future__ import annotations
@@ -37,15 +42,12 @@ def ingest_offline(
         staging_dir.rmdir()
 
     prepare.run_name_normalizer(ws, plugin)
-    prepare.sanitize_workspace(ws, plugin)
+    input_files = deck.input_files(ws)
+    prepare.sanitize_files(ws, plugin, input_files)
     prepare.move_licences(ws, plugin)
 
     write_flat(
         ws.eco_deck_path,
-        [
-            ws.root / name
-            for name in deck.input_files(ws)
-            if (ws.root / name).is_file()
-        ],
+        [ws.root / name for name in input_files if (ws.root / name).is_file()],
     )
     deck.set_process_manager(ws)

@@ -22,6 +22,7 @@ from hpc_model_utils.core.lifecycle.prepare import (
     preprocess,
     purge_stale_outputs,
     run_name_normalizer,
+    sanitize_files,
     sanitize_workspace,
 )
 from hpc_model_utils.core.plugin import ExecutableSpec, ParentRun
@@ -338,6 +339,66 @@ def test_sanitize_workspace_excludes_deck_modelops_license_pattern_symlink(
     assert (ws.root / "cortes-001.dat").read_bytes() == _LATIN1
     assert link.is_symlink()
     assert outside.read_bytes() == _LATIN1
+
+
+def test_sanitize_files_converts_only_named_files(tmp_path: Path) -> None:
+    ws = Workspace.at(tmp_path)
+    named = ws.root / "dger.dat"
+    unnamed = ws.root / "pmo.dat"
+    named.write_bytes(_LATIN1)
+    unnamed.write_bytes(_LATIN1)
+
+    converted = sanitize_files(ws, FakePlugin(), ("dger.dat", "missing.dat"))
+
+    assert converted == ("dger.dat",)
+    assert named.read_bytes() == "NOME ACENTUAÇÃO\n".encode("utf-8")
+    assert unnamed.read_bytes() == _LATIN1
+
+
+@pytest.mark.parametrize("name", ["sub/dger.dat", "../outside.dat", "..", ""])
+def test_sanitize_files_skips_names_that_are_not_top_level(
+    tmp_path: Path, name: str
+) -> None:
+    root = tmp_path / "ws"
+    (root / "sub").mkdir(parents=True)
+    ws = Workspace.at(root)
+    nested = root / "sub" / "dger.dat"
+    outside = tmp_path / "outside.dat"
+    nested.write_bytes(_LATIN1)
+    outside.write_bytes(_LATIN1)
+
+    converted = sanitize_files(ws, FakePlugin(), (name,))
+
+    assert converted == ()
+    assert nested.read_bytes() == _LATIN1
+    assert outside.read_bytes() == _LATIN1
+
+
+def test_sanitize_files_applies_the_workspace_exclusions(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "ws"
+    root.mkdir()
+    ws = Workspace.at(root)
+    ws.eco_deck_path.write_bytes(_LATIN1)
+    (ws.root / "status.modelops").write_bytes(_LATIN1)
+    (ws.root / "FAKE.LIC").write_bytes(_LATIN1)
+    (ws.root / "cortes-001.dat").write_bytes(_LATIN1)
+
+    converted = sanitize_files(
+        ws,
+        _ExclusionPlugin(),
+        (
+            ws.eco_deck_path.name,
+            "status.modelops",
+            "FAKE.LIC",
+            "cortes-001.dat",
+        ),
+    )
+
+    assert converted == ()
+    for name in ("status.modelops", "FAKE.LIC", "cortes-001.dat"):
+        assert (ws.root / name).read_bytes() == _LATIN1
 
 
 # ---------------------------------------------------------------------------

@@ -1,15 +1,15 @@
-# Runbook: roll out the final re-pin to v2.2.0
+# Runbook: roll out the final re-pin to v2.2.1
 
 This runbook is the ticket-083b apply (ADR-033, ADR-054, R89 as amended
 2026-10-05, R111, R127, R131). It is the last rollout of the v2 plan and runs
 after every earlier rollout has passed. When it ends, `NEWAVE - PEM`,
-`DECOMP - PEM`, `Upload NEWAVE` and `cobre` run the `hpc-model-utils` `v2.2.0`
+`DECOMP - PEM`, `Upload NEWAVE` and `cobre` run the `hpc-model-utils` `v2.2.1`
 release, and a successful cobre run publishes the cobre-bridge dashboard.
 
 What the apply changes:
 
 - The four workflows `newave-pem`, `decomp-pem`, `upload-newave` and `cobre`
-  change their `utilsAppVersion`/`utilsAppSha` pair to the `v2.2.0` pin. The
+  change their `utilsAppVersion`/`utilsAppSha` pair to the `v2.2.1` pin. The
   first three move from `v2.0.2`, `cobre` from `v2.1.0`. This puts the
   ticket-079 FC stage promotion (R111) and the epic-06 log changes into
   production.
@@ -37,10 +37,10 @@ directory.
 
 | Placeholder | Where its value comes from |
 | --- | --- |
-| `<repin-commit>` | the ticket-083 commit that pins the four workflows to `v2.2.0` |
+| `<repin-commit>` | the ticket-088 commit that pins the four workflows to `v2.2.1` |
 | `<last-applied-commit>` | the commit stamped by the `## Upload Versão cobre` apply: the `[deploy/modelops <sha>]` stamp recorded in that evidence section |
 | `<env-file>` | the private environment file of the Cobre apply, holding the three ids that apply created; this runbook adds no key |
-| `<utils-v2.2.0-sha12>` | the first 12 characters of the `utilsAppSha` default of the four workflows (the `hpc-model-utils` `v2.2.0` pin) |
+| `<utils-v2.2.1-sha12>` | the first 12 characters of the `utilsAppSha` default of the four workflows (the `hpc-model-utils` `v2.2.1` pin) |
 | `<tools-root>` | env `toolsRoot` |
 | `<utils-sha40>` | the full `utilsAppSha` default of the four workflows |
 | `<artifacts-bucket>`, `<hash>` | env `outputsBucket`, and the execution's ExecutionHash (P7) |
@@ -52,8 +52,8 @@ directory.
 
 **Agent-checked** before this runbook was committed, recorded in the evidence:
 
-- the private release-pin record holds the `hpc-model-utils` `v2.2.0` row,
-  and `<utils-v2.2.0-sha12>` is `504412203932`;
+- the private release-pin record holds the `hpc-model-utils` `v2.2.1` row,
+  and `<utils-v2.2.1-sha12>` is `3e94f2d89207`;
 - at `<repin-commit>`, the four workflows carry that pin, and `cobre` carries
   the cobre-bridge `v0.17.0` pin `1b059ac505a8`; the `PIN` lines below pass
   `tests/deploy/test_runbook_pins.py`;
@@ -113,7 +113,7 @@ Expected output:
   `CHANGED` entry is followed by its diff against live (`-` is the rendered
   definition, `+` is live): read them.
   - `newave-pem`, `decomp-pem` and `upload-newave`: the `utilsAppVersion`
-    default `"v2.2.0"` against `"v2.0.2"`, and the `utilsAppSha` default, and
+    default `"v2.2.1"` against `"v2.0.2"`, and the `utilsAppSha` default, and
     nothing else.
   - `cobre`: the same pair against `"v2.1.0"`, the three new parameters
     `synthesisToolDir`, `synthesisAppVersion` and `synthesisAppSha`, and the
@@ -126,20 +126,20 @@ Expected output:
 - The eleven `PIN` lines, in the order of the workflow slugs:
 
   ```text
-  PIN v2.2.0 504412203932 ok
+  PIN v2.2.1 3e94f2d89207 ok
   PIN v0.17.0 1b059ac505a8 ok
-  PIN v2.2.0 504412203932 ok
+  PIN v2.2.1 3e94f2d89207 ok
   PIN v3.0.1 b5f4bbaccc7f ok
-  PIN v2.2.0 504412203932 ok
+  PIN v2.2.1 3e94f2d89207 ok
   PIN v2.4.5 00305719ee16 ok
   PIN v1.0.1 f61dd5633c8c ok
   PIN v2.4.5 00305719ee16 ok
-  PIN v2.2.0 504412203932 ok
+  PIN v2.2.1 3e94f2d89207 ok
   PIN v2.4.5 00305719ee16 ok
   PIN upload-versao: no SHA pin (v1)
   ```
 
-  That is `PIN v2.2.0 504412203932 ok` four times (`cobre`, `decomp-pem`,
+  That is `PIN v2.2.1 3e94f2d89207 ok` four times (`cobre`, `decomp-pem`,
   `newave-pem`, `upload-newave`), the cobre-bridge pin
   `PIN v0.17.0 1b059ac505a8 ok` once, and the unchanged `v3.0.1`, `v2.4.5`,
   `v1.0.1` and Upload Versão lines.
@@ -411,6 +411,6 @@ pre-apply content; nothing is created or deleted.
 
 5. Record the trigger, the time and the affected executions in the evidence.
 
-The installed `hpc-model-utils` `v2.2.0` and cobre-bridge directories under
+The installed `hpc-model-utils` `v2.2.1` and cobre-bridge directories under
 `<tools-root>` stay. Each is immutable, keyed by its commit, and harmless
 after a rollback: no definition references it any more. Do not remove them.
