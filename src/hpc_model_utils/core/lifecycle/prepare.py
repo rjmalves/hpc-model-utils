@@ -119,6 +119,17 @@ def run_name_normalizer(
 def sanitize_workspace(ws: Workspace, plugin: ModelPlugin) -> tuple[str, ...]:
     """Requirement 4/ADR-018: top-level only, never through a symlink,
     never into ``assets/``/``.hpcmu/``."""
+    return sanitize_files(
+        ws, plugin, tuple(entry.name for entry in ws.root.iterdir())
+    )
+
+
+def sanitize_files(
+    ws: Workspace, plugin: ModelPlugin, names: Sequence[str]
+) -> tuple[str, ...]:
+    """``sanitize_workspace`` restricted to the named top-level files.
+    A name that is not a bare top-level file name (``a/b``, ``..``) is
+    skipped, since deck index files supply these names."""
     if not plugin.sanitize_encoding:
         return ()
     license_files = {name.lower() for name in plugin.executables.license_files}
@@ -127,7 +138,14 @@ def sanitize_workspace(ws: Workspace, plugin: ModelPlugin) -> tuple[str, ...]:
         for pattern in plugin.sanitize_exclude
     )
     converted: list[str] = []
-    for entry in ws.root.iterdir():
+    for name in dict.fromkeys(names):
+        if (
+            name in {"", ".", ".."}
+            or "\\" in name
+            or PurePosixPath(name).name != name
+        ):
+            continue
+        entry = ws.root / name
         if entry.is_symlink() or not entry.is_file():
             continue
         if entry == ws.eco_deck_path:

@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. 2.2.0 tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)), cleans the logs and adds a cobre results dashboard. 2.2.1 fixes the reporting of S3 upload and read failures and the cancellation of a terminated run.
 
+## [Unreleased]
+
+### Fixed
+
+- `ingest_offline_run` (the Upload NEWAVE workflow) encoding-sanitizes only the deck's input files, never the extracted outputs. Reading multi-GB output binaries whole exhausted the head node's memory and killed the ingest before it recorded the run as offline, so the next step ran NEWAVE on the uploaded deck, which then failed for lack of its licence file.
+
 ## [2.2.1] - 2026-10-06
 
 ### Fixed

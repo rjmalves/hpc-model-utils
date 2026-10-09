@@ -13,6 +13,7 @@ import pytest
 
 from hpc_model_utils.core.diagnosis import Diagnosis, RunStatus
 from hpc_model_utils.core.errors import DataError, UsageError
+from hpc_model_utils.core.lifecycle import prepare
 from hpc_model_utils.core.lifecycle.fetch import fetch_executables
 from hpc_model_utils.core.lifecycle.ingest import ingest_offline_run
 from hpc_model_utils.core.state import (
@@ -22,6 +23,7 @@ from hpc_model_utils.core.state import (
     render_metadata,
 )
 from hpc_model_utils.core.workspace import Workspace
+from hpc_model_utils.infra.encoding import TextEncoding, sanitize_file
 from hpc_model_utils.infra.s3 import S3Uri
 from hpc_model_utils.models.newave import NewavePlugin, deck, offline
 from tests.support.decks import FIXTURES, binary_cut_files, input_zip
@@ -317,3 +319,48 @@ def test_ingest_offline_same_member_in_inputs_and_outputs_outputs_wins(
     )
 
     assert (ws.root / "hidr.dat").read_bytes() == b"OVERRIDDEN"
+
+
+# -- only the deck's input files are sanitized ------------------------------
+
+
+def test_ingest_offline_sanitizes_only_input_deck_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "assets").mkdir()
+    ws = Workspace.at(root)
+
+    archives_dir = tmp_path / "archives"
+    archives_dir.mkdir()
+    inputs_zip = archives_dir / "inputs.zip"
+    inputs_zip.write_bytes(
+        (FIXTURES / "decks" / "deck_newave.zip").read_bytes()
+    )
+    latin1_output = b"SA\xcdDA\r\n"
+    outputs_zip = input_zip(
+        {"pmo.dat": _PMO_CONTENT, "relato.rel": latin1_output},
+        archives_dir / "outputs.zip",
+    )
+    cortes_zip = input_zip(
+        binary_cut_files(_CUT_NAMES), archives_dir / "cortes.zip"
+    )
+
+    opened: list[str] = []
+
+    def recording_sanitize(path: Path) -> TextEncoding:
+        opened.append(path.name)
+        return sanitize_file(path)
+
+    monkeypatch.setattr(prepare, "sanitize_file", recording_sanitize)
+
+    offline.ingest_offline(
+        NewavePlugin(), ws, (inputs_zip, outputs_zip, cortes_zip)
+    )
+
+    assert opened
+    assert set(opened) <= set(deck.input_files(ws))
+    assert "pmo.dat" not in opened
+    assert "relato.rel" not in opened
+    assert (ws.root / "relato.rel").read_bytes() == latin1_output
