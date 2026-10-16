@@ -42,6 +42,7 @@ from tests.deploy.test_task_script_idiom import (
 from tests.deploy.test_v2_workflows import (
     SHA,
     TAG,
+    UTILS_TAG,
     UUID4,
     _load,
     _params,
@@ -98,7 +99,6 @@ PARAMETER_NAMES = (
     "versionsBucket",
     "jobTimeoutHours",
 )
-UTILS_TAG = "v2.2.2"
 BRIDGE_TOOL = "novomodelo-bridge"
 BRIDGE_REPO = "https://github.com/ons-ccee-epe/novomodelo-bridge.git"
 UPLOAD_WORKFLOW = "workflows/upload-versao.json"
@@ -323,6 +323,9 @@ def check_pins(root: Path) -> list[str]:
         errors.append(f"{WORKFLOW}: utilsAppVersion is not {UTILS_TAG}")
     if not SHA.fullmatch(sha):
         errors.append(f"{WORKFLOW}: utilsAppSha is not 40 hex")
+    newave = _params(_load(root / "workflows/newave-pem.json"))
+    if sha != str(newave.get("utilsAppSha", {}).get("defaultValue", "")):
+        errors.append(f"{WORKFLOW}: utilsAppSha differs from newave-pem")
     for name in ("utilsAppVersion", "utilsAppSha"):
         param = params.get(name, {})
         shape = (
@@ -525,6 +528,10 @@ def _visible_sha(doc: dict[str, Any]) -> None:
     _parameter(doc, "utilsAppSha")["visible"] = True
 
 
+def _cobre_utils_sha_drift(doc: dict[str, Any]) -> None:
+    _parameter(doc, "utilsAppSha")["defaultValue"] = "0" * 40
+
+
 def test_check_chain_real_tree_reports_nothing() -> None:
     require(check_chain(MODELOPS))
 
@@ -616,6 +623,7 @@ def test_check_pins_real_tree_reports_nothing() -> None:
         (_branch_tag, r"utilsAppVersion is not v"),
         (_short_sha, r"utilsAppSha is not 40 hex"),
         (_visible_sha, r"parameter utilsAppSha has the wrong shape"),
+        (_cobre_utils_sha_drift, r"utilsAppSha differs from newave-pem"),
     ],
 )
 def test_check_pins_mutated_copy_is_reported(
