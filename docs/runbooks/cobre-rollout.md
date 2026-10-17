@@ -3,7 +3,8 @@
 Note (2026-10-16): from hpc-model-utils v2.3.1, cobre runs the novomodelo
 fork's `novomodelo-mpi`. The `cobre-mpi` steps in this record describe the
 v0.17.0 rollout. To upload a new version, follow
-[Upload a novomodelo version](#upload-a-novomodelo-version).
+[Upload a novomodelo version](#upload-a-novomodelo-version), which needs
+Upload Versão on upload-versoes-cli `v2.0.0`.
 
 This runbook is the ticket-073 apply (ADR-058, ADR-057, ADR-050, ADR-051,
 ADR-054, R89 as amended 2026-10-05, R105, R131). It runs after the ticket-067c
@@ -258,6 +259,12 @@ failure in the summary. Recover it:
    or `summary: 23 unchanged, 0 changed, 0 new, 0 failures` during it.
 
 ## Upload Versão cobre option
+
+History note (2026-10-16): this section is the upload-versoes-cli `v1.1.0`
+rollout, kept as a record. Do not run its Preview, Apply or Rollback again:
+its Rollback re-applies `<cobre-workflow-commit>`, which predates the re-pin
+to v2.3.1, and `v1.1.0` cannot upload a `novomodelo-mpi` build. The `v2.0.0`
+apply is `## Upload Versão apply` of `docs/runbooks/v2-final-repin.md`.
 
 This section is the ticket-074 apply (ADR-058, R89 as amended 2026-10-05, R105,
 R110). It runs after the Cobre apply above has passed. When it ends, Upload
@@ -904,19 +911,20 @@ On the head node or the workstation, in `<head-scratch>`.
 3. **Record the archive hash and the binary hash,** and extract the binary:
 
    ```bash
-   sha256sum novomodelo-mpi-<version>-x86_64-unknown-linux-gnu.tar.gz
-   tar -xzOf novomodelo-mpi-<version>-x86_64-unknown-linux-gnu.tar.gz ./novomodelo-mpi | sha256sum
+   sha256sum novomodelo-mpi-<version>-x86_64-unknown-linux-gnu.tar.gz | tee hashes.txt
+   tar -xzOf novomodelo-mpi-<version>-x86_64-unknown-linux-gnu.tar.gz ./novomodelo-mpi | sha256sum | tee -a hashes.txt
    tar -xzf novomodelo-mpi-<version>-x86_64-unknown-linux-gnu.tar.gz ./novomodelo-mpi
-   sha256sum novomodelo-mpi
+   sha256sum novomodelo-mpi | tee -a hashes.txt
    ```
 
    The second and fourth commands print the same hash: the binary hash.
+   `hashes.txt` keeps the three lines, for the evidence.
 4. **Zip the binary alone** and check the zip:
 
    ```bash
    zip novomodelo-mpi-<version>.zip novomodelo-mpi
    python3 -c 'import sys, zipfile; print(*zipfile.ZipFile(sys.argv[1]).namelist(), sep="\n")' novomodelo-mpi-<version>.zip
-   python3 -c 'import hashlib, sys, zipfile; print(hashlib.sha256(zipfile.ZipFile(sys.argv[1]).read("novomodelo-mpi")).hexdigest())' novomodelo-mpi-<version>.zip
+   python3 -c 'import hashlib, sys, zipfile; print(hashlib.sha256(zipfile.ZipFile(sys.argv[1]).read("novomodelo-mpi")).hexdigest())' novomodelo-mpi-<version>.zip | tee -a hashes.txt
    ```
 
    The listing prints exactly `novomodelo-mpi`, and the member hash equals the
@@ -931,17 +939,35 @@ On the head node or the workstation, in `<head-scratch>`.
 
 ### Run the novomodelo upload
 
-Run Upload Versão with `modelName` `cobre`, `modelVersion` `v<version>` and
-`executablesFile` `<inputs-uri>/novomodelo-mpi-<version>.zip`.
+**Precondition:** Upload Versão runs upload-versoes-cli `v2.0.0` or later.
+`v1.1.0` uploads only `cobre-mpi`: it skips `novomodelo-mpi`, logs
+`No files to process` and exits 1. In a checkout of the last applied commit,
+this prints `v2.0.0`, and the last post-apply dry run printed
+`summary: 26 unchanged, 0 changed, 0 new, 0 failures`:
 
 ```bash
-L="$EV/cobre/upload/execution-<execution-id>.log"
-jq -r .executionStatus "$EV/cobre/upload/execution-<execution-id>.json"
+jq -r '.parameters[] | select(.name == "uploadCliVersion") | .defaultValue' deploy/modelops/workflows/upload-versao.json
+```
+
+Run Upload Versão with `modelName` `cobre`, `modelVersion` `v<version>` and
+`executablesFile` `<inputs-uri>/novomodelo-mpi-<version>.zip`. After it
+reaches a terminal status, export it with `export_execution` (P4 of
+`docs/runbooks/v2-pre-rollout.md`) and keep the version's evidence in one
+directory. Copy `members.txt` and `hashes.txt` from `<head-scratch>` into it
+first. Run the two `aws` lines where the versions bucket is reachable, and
+keep their files in the same directory:
+
+```bash
+U="$EV/cobre/upload/v<version>"
+mkdir -p "$U"
+export_execution <execution-id> "$U"
+L="$U/execution-<execution-id>.log"
+jq -r .executionStatus "$U/execution-<execution-id>.json"
 grep -nF 'Using processor for model: cobre' "$L"
 grep -nF 'Found 1 files in ' "$L"
 grep -nF 'Will process: novomodelo-mpi -> novomodelo-mpi' "$L"
-aws s3 ls "s3://<versoes-bucket>/versoes/cobre/v<version>/"
-aws s3 cp "s3://<versoes-bucket>/versoes/cobre/v<version>/novomodelo-mpi" - | sha256sum
+aws s3 ls "s3://<versoes-bucket>/versoes/cobre/v<version>/" | tee "$U/ls.txt"
+aws s3 cp "s3://<versoes-bucket>/versoes/cobre/v<version>/novomodelo-mpi" - | sha256sum | tee "$U/readback.txt"
 ```
 
 **Pass criterion:**
@@ -950,11 +976,28 @@ aws s3 cp "s3://<versoes-bucket>/versoes/cobre/v<version>/novomodelo-mpi" - | sh
 - the log has `Using processor for model: cobre`, `Found 1 files in ` (the
   extraction directory follows) and
   `Will process: novomodelo-mpi -> novomodelo-mpi`;
-- `aws s3 ls s3://<versoes-bucket>/versoes/cobre/v<version>/`
-  lists exactly one object, `novomodelo-mpi`;
+- `aws s3 ls s3://<versoes-bucket>/versoes/cobre/v<version>/` lists
+  `novomodelo-mpi`. Another object there, such as a pre-fork `cobre-mpi`, is
+  recorded and left in place: upload-versoes-cli never deletes, and the
+  plugin runs only `novomodelo-mpi`;
 - `aws s3 cp s3://<versoes-bucket>/versoes/cobre/v<version>/novomodelo-mpi - | sha256sum`
   equals the recorded binary hash.
 
-**If the run fails:** follow the failure list of the `### Upload run` section
-above, and read its `cobre-mpi` as `novomodelo-mpi`. Record the failure and do
-not offer the version.
+**If the run fails:**
+
+- **`Skipping file (no matching pattern): novomodelo-mpi`, then
+  `No files to process`:** the clone is older than `v2.0.0`. Check the
+  applied `uploadCliVersion` default, and record the failure.
+- **`Skipping file (no matching pattern): cobre-mpi`, then
+  `No files to process`:** the zip holds the pre-fork binary. Rebuild it
+  from `### Build the novomodelo-mpi zip`, copy it again, and record the
+  deviation.
+- **`Unsupported model`:** the clone predates the `cobre` model. Check the
+  applied `uploadCliVersion` default, and record the failure.
+- **`S3 source URI must point to a .zip or .tar.gz file`:** the
+  `executablesFile` URI lost its `.zip` suffix. Copy the zip again under its
+  name, and record the deviation.
+- **`Downloaded file is not a valid zip archive`:** rebuild the zip from step
+  4 of the build, copy it again, and record the deviation.
+
+Record the failure and do not offer the version.

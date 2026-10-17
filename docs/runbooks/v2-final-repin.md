@@ -38,9 +38,11 @@ What the apply changes:
   not change.
 - Adding a cobre version needs no change in this repository (ADR-100, R96): a
   novomodelo and a novomodelo-bridge tag of the same name, a `novomodelo-mpi`
-  Upload Versão, and the option in the UI.
-- The `ranqueamento` and `upload-versao` workflows do not change. Nothing is
-  created or deleted.
+  Upload Versão on upload-versoes-cli `v2.0.0`, and the option in the UI.
+- The `ranqueamento` and `upload-versao` workflows do not change in this
+  apply. Nothing is created or deleted. `upload-versao` changes in its own
+  later apply, `## Upload Versão apply`: upload-versoes-cli `v1.1.0` uploads
+  only `cobre-mpi`, so the `novomodelo-mpi` uploads need `v2.0.0`.
 
 The repository is public, so this file uses placeholders only (R104, R127).
 Every real value lives in the private environment files. This runbook reuses
@@ -59,7 +61,10 @@ Evidence goes to `$EV/repin/`, never here:
   `sync-preview-<TS>.txt`, `live-guard-<TS>.txt`, `sync-apply-<TS>.txt`,
   `apply-report-diff-<TS>.txt` and, once it wrote, `sync-post-apply-<TS>.txt`
   and `snapshot-post-apply-<TS>/`;
-- for the pin rollback, also `rollback-check-<TS>.txt`.
+- for the pin rollback, also `rollback-check-<TS>.txt`;
+- for `## Upload Versão apply`, the same per-attempt files under each
+  `<upload-TS>`, and the uploads of each version under
+  `$EV/cobre/upload/v<version>/`.
 
 The hand-back copies `$EV/repin/` to `<private-plan-dir>/design/rollout/raw/`
 for ticket-062's private record:
@@ -86,6 +91,8 @@ test ! -e <private-plan-dir>/design/rollout/raw && cp -r "$EV/repin" <private-pl
 | `<versions-bucket>` | env `versionsBucket` |
 | `<keycloak-username>` | the operator's Keycloak username, exported as `MODELOPS_USER` |
 | `<first-apply-TS>` | the `TS` of the first `--apply` that wrote |
+| `<upload-commit>` | the commit holding ticket-060h and ticket-060i, on top of `<repin-commit>`, pushed to `origin`; `## Upload Versão apply` runs from it |
+| `<upload-TS>` | the `TS` of one `## Upload Versão apply` attempt |
 | `<reference-snapshot>` | for the re-pin apply, the `Snapshot dir` of the private live-edits record's last fold round, under `<private-plan-dir>`; for each later apply, the `$EV/repin/snapshot-post-apply-<TS>` of the apply before it |
 | `<baseline-execution-id>` | per watched Slurm run, the operator's last comparable execution of the same workflow before the apply (same model, a comparable deck and core count), or `none` |
 | `<private-plan-dir>` | the gitignored directory of this rollout's plan in the operator's repository checkout |
@@ -171,9 +178,12 @@ comes first on purpose: nothing below may run without it.
    aws s3 ls --recursive "s3://<versions-bucket>/versoes/cobre/<model-version>/" | /usr/bin/grep -c -F novomodelo-mpi || true
    ```
 
-   Each prints at least `1`. A `0` stops: that version needs a
-   `novomodelo-mpi` Upload Versão first. The operator uploads the build, or
-   removes the option through a git change; the runbook does not choose.
+   Each prints at least `1`. A `0` means that version needs a
+   `novomodelo-mpi` Upload Versão, which needs upload-versoes-cli `v2.0.0`:
+   `v1.1.0` skips the file and prints `No files to process`. Record each
+   count. A `0` no longer stops the re-pin: `## Upload Versão apply` and its
+   uploads, after `## Apply`, close it before smoke run 4. Until they pass, a
+   cobre run of that version fails at `fetch-executables`.
 
 ## Preview
 
@@ -614,6 +624,127 @@ those.
   Preview again and this Apply with a fresh token, as step 6 describes after
   its wait.
 
+## Upload Versão apply
+
+This apply is ticket-060j's (R95, R96, ADR-099). It runs after `## Apply` has
+written the re-pin, and before smoke run 4. It changes one value: the hidden
+`uploadCliVersion` default of the workflow `upload-versao`, from `v1.1.0` to
+`v2.0.0`. upload-versoes-cli `v1.1.0` uploads only a file named `cobre-mpi`:
+it skips a `novomodelo-mpi` build, logs `No files to process` and exits 1.
+`v2.0.0` uploads only `novomodelo-mpi`, as
+`versoes/cobre/<model-version>/novomodelo-mpi`, and deletes nothing: the
+`cobre-mpi` builds stay. Until this apply and its uploads pass, a cobre run of a
+version whose folder holds no `novomodelo-mpi` fails at `fetch-executables`.
+
+### 1. Preconditions
+
+1. **The re-pin has written, and nothing is running.**
+   - The post-apply dry run of `## Apply` step 4 printed
+     `summary: 26 unchanged, 0 changed, 0 new, 0 failures`, and its
+     `snapshot-post-apply-<TS>` exists. That snapshot is this apply's
+     `<reference-snapshot>`, unless a later apply (the lever, or its revert)
+     wrote: then it is that apply's `snapshot-post-apply-<TS>`.
+   - `git ls-remote https://github.com/rjmalves/upload-versoes-cli.git refs/tags/v2.0.0`
+     prints one line.
+   - No Upload Versão execution is active. Run `active_executions` now, and
+     again immediately before the apply. If one is executing, wait for it to
+     end.
+2. **The committed tree.** Work from a clean checkout of `<upload-commit>`,
+   and record it in the evidence. This prints `v2.0.0`:
+
+   ```bash
+   jq -r '.parameters[] | select(.name == "uploadCliVersion") | .defaultValue' deploy/modelops/workflows/upload-versao.json
+   ```
+
+3. **Tunnel, token and environment file** as in items 3 and 4 of
+   `## Preconditions`.
+
+### 2. The Preview
+
+Run steps 1 to 3 of `## Preview` from `<upload-commit>`, with a new `TS` as
+`<upload-TS>` and the `<reference-snapshot>` of item 1. The guard must print
+`SAME`. A `DIFFERS` line on the document that this apply writes is a stop: the
+user's edit is folded into a new `<upload-commit>` by hand, from the
+Preview's diff, and never overwritten. The dry run expects:
+
+- `upload-versao` as the only `CHANGED` document, and its diff is one line
+  pair, the `uploadCliVersion` default (`-` is the rendered definition, `+`
+  is live):
+
+  ```text
+  -      "defaultValue": "v2.0.0",
+  +      "defaultValue": "v1.1.0",
+  ```
+
+- every other document `UNCHANGED`, with the six own `v1-` Tasks
+  `PROTECTED`;
+- the same 11 `PIN` lines as `## Preview` step 4, the last one still
+  `PIN upload-versao: no SHA pin (v1)`: `apply.py` checks no CLI tag;
+- no `IDENTIFIER-GAP` line, and no `NEW`;
+- the summary line:
+
+  ```text
+  summary: 25 unchanged, 1 changed, 0 new, 0 failures
+  ```
+
+Any other result stops before `--apply`, as `## Preview` step 5 says. With
+the lever on, the dry run also lists the Tasks `run` and `cobre-run`, and
+the apply would switch telemetry back on: stop, and escalate.
+
+### 3. The apply
+
+Run `## Apply` steps 1 to 4 with `<upload-TS>`: re-check that no Upload
+Versão execution is active, take a fresh token (`TOKEN OK`), run
+`sync --apply`, and type `apply` only after the report check prints
+`APPLY REPORT = PREVIEW`. Expect exactly one `WRITTEN PUT` line, after the
+prompt on the same line of the tee file, and no `WRITTEN POST` or `CREATED`:
+
+```text
+WRITTEN PUT workflow upload-versao <workflow-id>
+```
+
+The post-apply dry run prints every definition `UNCHANGED` and
+`summary: 26 unchanged, 0 changed, 0 new, 0 failures`, and its
+`snapshot-post-apply-<upload-TS>` is the `<reference-snapshot>` of the next
+apply. A 422 is `## Apply` step 6: an Upload Versão execution is active. The
+UI check of `## Apply` step 5 is skipped: it reads `cobre` and `ensure-utils`,
+which this apply does not write.
+
+### 4. The uploads
+
+For each offered `<model-version>` (`## Preconditions` item 5 lists them),
+follow
+[Upload a novomodelo version](cobre-rollout.md#upload-a-novomodelo-version)
+of the cobre rollout runbook, with its evidence in
+`$EV/cobre/upload/v<version>/`, where `<model-version>` is `v<version>`.
+Then repeat the check of `## Preconditions` item 5 for that version, keeping
+its count. It prints at least `1`:
+
+```bash
+{ aws s3 ls --recursive "s3://<versions-bucket>/versoes/cobre/<model-version>/" | /usr/bin/grep -c -F novomodelo-mpi || true; } | tee "$EV/cobre/upload/v<version>/count.txt"
+```
+
+Smoke run 4 starts only after every offered version has passed.
+
+### 5. The hand-back
+
+Copy the evidence for ticket-060j's private record, from the root of the
+`<upload-commit>` checkout. `<upload-TS-list>` is every `<upload-TS>`:
+
+```bash
+R=<private-plan-dir>/design/rollout/raw-upload-versao
+if test ! -e "$R"; then
+  mkdir -p "$R/repin" "$R/upload"
+  cp -r <reference-snapshot> "$R/repin/"
+  for ts in <upload-TS-list>; do cp -r "$EV/repin/"*"-$ts"* "$R/repin/"; done
+  for v in $(jq -r '.parameters[] | select(.name == "modelVersion") | .options[] | ltrimstr("v")' deploy/modelops/workflows/cobre.json); do
+    cp -r "$EV/cobre/upload/v$v" "$R/upload/"
+  done
+else
+  echo "exists: $R"
+fi
+```
+
 ## Smoke runs
 
 Four runs, started from the UI on the re-pinned workflows, one after the
@@ -741,7 +872,8 @@ evidence.
    `jobTimeoutHours` 1), and `modelVersion` = `<model-version>`, the committed
    default. This run is the first prd proof of the novomodelo fork: the
    `novomodelo-mpi` binary, the novomodelo-bridge tag that `<model-version>`
-   names, and its dashboard.
+   names, and its dashboard. It starts only after `## Upload Versão apply`
+   and its uploads have passed: before them, it fails at `fetch-executables`.
 
    ```bash
    # head node copy list
@@ -1169,6 +1301,10 @@ M="$D/model-$MID.out" F="$D/finalize-$FID.out"
   - A production run that is cancelled or hits its time limit is watched like
     any other. Its `WALL` reading is then `NA`, and its `COMPLETING` reading,
     when polled, is the only prd evidence of that job-end path.
+  - A `cobre` run that fails at `fetch-executables` before
+    `## Upload Versão apply` and its uploads have passed is recorded, not
+    watched: `prod-cobre` is the first `cobre` execution that starts after
+    the last upload passed.
 - **How.** Collect it as a smoke run's steps 1–3, with the copy list of the
   matching smoke run plus `saidas/run.json`, then take `## Telemetry readings`,
   its head-node parts before step 3's copy as for a smoke run. Polling the job
@@ -1369,7 +1505,10 @@ The dry run expects:
   CHANGED workflow upload-newave
   ```
 
-  With the lever on, the Task `run` is `CHANGED` too.
+  With the lever on, the Task `run` is `CHANGED` too. Once
+  `## Upload Versão apply` has written, the workflow `upload-versao` is
+  `CHANGED` too, last in the list, with its `uploadCliVersion` default back
+  to `v1.1.0`.
 - every `PIN` line ending in `ok`. These are the pins of `<fold-commit>`,
   which its own `apply.py` verifies, and this runbook does not quote them.
 - the summary line, with m = 7, the block's count:
@@ -1378,7 +1517,9 @@ The dry run expects:
   summary: 19 unchanged, 7 changed, 0 new, 0 failures
   ```
 
-  With the lever on, it is one more changed and one fewer unchanged.
+  With the lever on, it is one more changed and one fewer unchanged. Once
+  `## Upload Versão apply` has written, it is one more again: with the lever
+  off, m = 8 and `summary: 18 unchanged, 8 changed, 0 new, 0 failures`.
 
 #### Step 4: the apply
 
@@ -1396,7 +1537,10 @@ snapshot is the next `<reference-snapshot>`.
 cobre returns to its pre-apply release, which accepts only a `cobre-mpi`
 build and runs the cobre-bridge pin of `<fold-commit>`. A `modelVersion`
 whose versions-bucket upload holds only `novomodelo-mpi` then fails at
-`fetch-executables`. That is why level 2 is the last resort. A trigger traced
+`fetch-executables`. Once `## Upload Versão apply` has written, level 2
+also returns Upload Versão to upload-versoes-cli `v1.1.0`, which uploads
+`cobre-mpi` builds, the binary that release runs; the `novomodelo-mpi`
+objects stay in the bucket. That is why level 2 is the last resort. A trigger traced
 to a class (a) change is escalated, not rolled back here.
 
 #### Step 7: the record
@@ -1452,7 +1596,9 @@ script plus `export HPCMU_TELEMETRY=off`.
 4. **Its reach.** The lever affects every workflow that uses those Tasks
    (`newave-pem`, `decomp-pem`, `upload-newave`, `cobre`), and only from their
    next run.
-5. **Revert:** re-apply `<repin-commit>` (`git switch --detach <repin-commit>`).
+5. **Revert:** re-apply the commit the lever was made from: `<upload-commit>`
+   once `## Upload Versão apply` has written, else `<repin-commit>`
+   (`git switch --detach <that-commit>`).
    The same Preview, guard and report check run. The dry run shows the same
    two Tasks `CHANGED`, now with the off line on the `+` side, and the same
    `24 unchanged, 2 changed` summary. Apply, then dry run with `26 unchanged`,

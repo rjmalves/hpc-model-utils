@@ -525,8 +525,10 @@ to the repository root.
 
 - The only cobre binary is `novomodelo-mpi` (the novomodelo fork's MPI
   build), and it runs on every node count. Every offered cobre `modelVersion`
-  needs a `novomodelo-mpi` upload in the versions bucket; the upload steps
-  are in [the cobre rollout runbook](runbooks/cobre-rollout.md#upload-a-novomodelo-version).
+  needs a `novomodelo-mpi` upload in the versions bucket, made by Upload
+  Versão on upload-versoes-cli `v2.0.0` or later: `v1.1.0` uploads only
+  `cobre-mpi`, and skips `novomodelo-mpi`. The upload steps are in
+  [the cobre rollout runbook](runbooks/cobre-rollout.md#upload-a-novomodelo-version).
 - `--max-cores-per-node` is required for cobre; a launch without it is a
   `DataError`.
 - The diagnosis never returns `INFEASIBLE`.
@@ -555,7 +557,8 @@ to the repository root.
   `output/simulation/` exists
   (`src/hpc_model_utils/models/cobre/outputs.py::dashboard_args`). Adding a
   cobre version needs no change in this repository: release novomodelo and
-  novomodelo-bridge with the same tag, run Upload Versão with the
-  `novomodelo-mpi` build, and add the option to `modelVersion` in the
-  ModelOps UI; the next apply folds it. A release that changes a contract
-  in these cobre runtime facts needs a change in this repository first.
+  novomodelo-bridge with the same tag, run Upload Versão (upload-versoes-cli
+  `v2.0.0` or later) with the `novomodelo-mpi` build, and add the option to
+  `modelVersion` in the ModelOps UI; the next apply folds it. A release that
+  changes a contract in these cobre runtime facts needs a change in this
+  repository first.
