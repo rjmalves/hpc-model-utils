@@ -47,7 +47,7 @@
       "description": "Versão da CLI de upload de versões",
       "name": "uploadCliVersion",
       "type": "String",
-      "defaultValue": "v1.1.0",
+      "defaultValue": "v2.0.0",
       "visible": false,
       "regexPattern": "",
       "format": "",

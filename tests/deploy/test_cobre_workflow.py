@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -103,7 +104,7 @@ BRIDGE_TOOL = "novomodelo-bridge"
 BRIDGE_REPO = "https://github.com/ons-ccee-epe/novomodelo-bridge.git"
 UPLOAD_WORKFLOW = "workflows/upload-versao.json"
 UPLOAD_MODEL_OPTIONS = ["newave", "decomp", "cobre"]
-UPLOAD_CLI_TAG = "v1.1.0"
+UPLOAD_CLI_TAG = "v2.0.0"
 
 # name -> (type, defaultValue, visible, regexPattern, format, options)
 SHAPES: dict[str, tuple[str, str, bool, str, str, list[str]]] = {
@@ -727,10 +728,10 @@ def _cobre_default(doc: dict[str, Any]) -> None:
 
 
 def _old_upload_cli(doc: dict[str, Any]) -> None:
-    _parameter(doc, "uploadCliVersion")["defaultValue"] = "v1.0.0"
+    _parameter(doc, "uploadCliVersion")["defaultValue"] = "v1.1.0"
 
 
-def test_upload_versao_offers_cobre_with_cli_v1_1_0() -> None:
+def test_upload_versao_offers_cobre_with_the_pinned_cli() -> None:
     require(check_upload_versao(MODELOPS))
 
 
@@ -739,7 +740,10 @@ def test_upload_versao_offers_cobre_with_cli_v1_1_0() -> None:
     [
         (_drop_cobre_option, r"modelName options are not"),
         (_cobre_default, r"modelName default is not newave"),
-        (_old_upload_cli, r"uploadCliVersion is not v1\.1\.0"),
+        (
+            _old_upload_cli,
+            rf"uploadCliVersion is not {re.escape(UPLOAD_CLI_TAG)}",
+        ),
     ],
 )
 def test_check_upload_versao_mutated_copy_is_reported(

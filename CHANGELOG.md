@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. 2.2.0 tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)), cleans the logs and adds a cobre results dashboard. 2.2.1 fixes the reporting of S3 upload and read failures and the cancellation of a terminated run. 2.2.2 fixes the Upload NEWAVE ingest of large offline runs. 2.2.3 supports cobre v0.18.0. 2.3.0 adds job telemetry. 2.3.1 runs the novomodelo fork of cobre.
 
+## [Unreleased]
+
+### Fixed
+
+- `Upload Versão` runs upload-versoes-cli 2.0.0, which uploads the `novomodelo-mpi` build of a cobre version as `versoes/cobre/<version>/novomodelo-mpi`. upload-versoes-cli 1.1.0 skipped that file and uploaded nothing, so the 2.3.1 entry's "run Upload Versão with the `novomodelo-mpi` build" holds only from this change. upload-versoes-cli 2.0.0 no longer uploads a `cobre-mpi` build, and it deletes nothing, so the `cobre-mpi` builds already in the versions bucket stay.
+
 ## [2.3.1] - 2026-10-16
 
 ### Changed
