@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -15,9 +16,17 @@ from hpc_model_utils.core.lifecycle.fetch import (
     normalize_parent_path,
     read_parent,
 )
-from hpc_model_utils.core.state import ParentInfo, StateStore
+from hpc_model_utils.core.plugin import ModelPlugin
+from hpc_model_utils.core.state import (
+    ModelInfo,
+    ParentInfo,
+    RunState,
+    StateStore,
+)
 from hpc_model_utils.core.workspace import Workspace
 from hpc_model_utils.infra.s3 import S3Uri
+from hpc_model_utils.models.decomp import DecompPlugin
+from hpc_model_utils.models.newave import NewavePlugin
 from tests.support.fake_plugin import FakePlugin, ParentPlugin
 from tests.support.object_store import RecordingObjectStore
 from tests.support.reporter import RecordingReporter
@@ -28,11 +37,39 @@ _OUTPUTS_BUCKET = "outputs-bucket"
 _BASE_VERSOES_URI = f"s3://{_VERSIONS_BUCKET}/versoes/fake/1.2/"
 _PARENT_URI = f"s3://{_OUTPUTS_BUCKET}/artifacts/abc"
 _INPUT_URI = f"s3://{_INPUTS_BUCKET}/entradas/deck.zip"
+_PARENT_METADATA_URI = f"{_PARENT_URI}/saidas/metadata.modelops"
+_PARENT_CORTES_URI = f"{_PARENT_URI}/saidas/cortes.zip"
+_ABSENT = object()
+
+_HookCall = tuple[ParentInfo, str | None, str | None, list[tuple[str, str]]]
 
 
 class _AlwaysWriteParentPlugin(ParentPlugin):
     name = "fakeparentalways"
     always_write_parent_path = True
+
+
+class _CheckParentPlugin(ParentPlugin):
+    def __init__(
+        self, store: RecordingObjectStore, error: Exception | None = None
+    ) -> None:
+        super().__init__()
+        self.store = store
+        self.error = error
+        self.calls: list[_HookCall] = []
+
+    def check_parent(
+        self,
+        ws: Workspace,
+        parent: ParentInfo,
+        parent_version: str | None,
+        child_version: str | None,
+    ) -> None:
+        self.calls.append(
+            (parent, parent_version, child_version, list(self.store.ops))
+        )
+        if self.error is not None:
+            raise self.error
 
 
 class _CountingPlugin(FakePlugin):
@@ -51,15 +88,48 @@ def _ws(tmp_path: Path) -> Workspace:
 
 
 def _parent_metadata(
-    *, model_name: str = "NEWAVE", status: str = "SUCCESS"
+    *,
+    model_name: str = "NEWAVE",
+    status: str = "SUCCESS",
+    model_version: object = _ABSENT,
 ) -> bytes:
-    return json.dumps(
-        {
-            "model_name": model_name,
-            "status": status,
-            "study_starting_date": "2025-10-01T00:00:00+00:00",
-        }
-    ).encode("utf-8")
+    payload: dict[str, object] = {
+        "model_name": model_name,
+        "status": status,
+        "study_starting_date": "2025-10-01T00:00:00+00:00",
+    }
+    if model_version is not _ABSENT:
+        payload["model_version"] = model_version
+    return json.dumps(payload).encode("utf-8")
+
+
+def _seed_parent_run(
+    store: RecordingObjectStore, metadata: bytes | None = None
+) -> None:
+    store.seed(S3Uri(_INPUTS_BUCKET, "entradas/deck.zip"), b"deck-bytes")
+    store.seed(
+        S3Uri(_OUTPUTS_BUCKET, "artifacts/abc/saidas/metadata.modelops"),
+        _parent_metadata() if metadata is None else metadata,
+    )
+    store.seed(
+        S3Uri(_OUTPUTS_BUCKET, "artifacts/abc/saidas/cortes.zip"),
+        b"cortes-bytes",
+    )
+
+
+def _fetch_with_parent(
+    ws: Workspace, plugin: ModelPlugin, store: RecordingObjectStore
+) -> RunState:
+    return fetch_inputs(
+        ws,
+        plugin,
+        store,
+        RecordingReporter(),
+        StateStore(ws),
+        _INPUT_URI,
+        parent_path=_PARENT_URI,
+        delete=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -392,11 +462,12 @@ def test_fetch_inputs_parent_gate_variants_raise_data_error(
             payload,
         )
     reporter = RecordingReporter()
+    plugin = _CheckParentPlugin(store)
 
     with pytest.raises(DataError, match=match):
         fetch_inputs(
             ws,
-            ParentPlugin(),
+            plugin,
             store,
             reporter,
             StateStore(ws),
@@ -407,6 +478,105 @@ def test_fetch_inputs_parent_gate_variants_raise_data_error(
 
     assert "delete" not in [op for op, _ in store.ops]
     assert not ws.parent_dir.exists()
+    assert plugin.calls == []
+
+
+def test_fetch_inputs_calls_check_parent_after_read_parent_before_artifact_downloads(
+    tmp_path: Path,
+) -> None:
+    ws = _ws(tmp_path)
+    store = RecordingObjectStore()
+    _seed_parent_run(store)
+    plugin = _CheckParentPlugin(store)
+
+    _fetch_with_parent(ws, plugin, store)
+
+    assert len(plugin.calls) == 1
+    parent, _, _, ops_at_call = plugin.calls[0]
+    assert parent == ParentInfo(
+        _PARENT_URI, "NEWAVE", "2025-10-01T00:00:00+00:00"
+    )
+    assert ("get_bytes", _PARENT_METADATA_URI) in ops_at_call
+    assert not any(uri.endswith("saidas/cortes.zip") for _, uri in ops_at_call)
+    assert store.ops[-2:] == [
+        ("download", _PARENT_CORTES_URI),
+        ("delete", _INPUT_URI),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        pytest.param(ModelInfo("FAKEPARENT", "v9.9.9"), "v9.9.9", id="version"),
+        pytest.param(ModelInfo("FAKEPARENT", None), None, id="no_version"),
+        pytest.param(None, None, id="no_model"),
+    ],
+)
+def test_fetch_inputs_passes_child_version_from_state_model(
+    tmp_path: Path, model: ModelInfo | None, expected: str | None
+) -> None:
+    ws = _ws(tmp_path)
+    store = RecordingObjectStore()
+    _seed_parent_run(store)
+    plugin = _CheckParentPlugin(store)
+    state_store = StateStore(ws)
+    state_store.save(
+        replace(state_store.load_or_create(plugin.name), model=model)
+    )
+
+    _fetch_with_parent(ws, plugin, store)
+
+    assert [call[2] for call in plugin.calls] == [expected]
+
+
+@pytest.mark.parametrize("error_type", [DataError, UsageError])
+def test_fetch_inputs_raising_check_parent_downloads_no_artifact_and_keeps_input(
+    tmp_path: Path, error_type: type[Exception]
+) -> None:
+    ws = _ws(tmp_path)
+    store = RecordingObjectStore()
+    _seed_parent_run(store)
+    plugin = _CheckParentPlugin(store, error_type("rejected by hook"))
+
+    with pytest.raises(error_type, match="rejected by hook"):
+        _fetch_with_parent(ws, plugin, store)
+
+    assert not any(
+        op == "download" and uri.startswith(f"s3://{_OUTPUTS_BUCKET}/")
+        for op, uri in store.ops
+    )
+    assert "delete" not in [op for op, _ in store.ops]
+    assert not ws.parent_dir.exists()
+    saved = StateStore(ws).load()
+    assert saved is not None
+    assert all(step.command != "check_and_fetch_inputs" for step in saved.steps)
+
+
+@pytest.mark.parametrize(
+    "plugin", [NewavePlugin(), DecompPlugin()], ids=["newave", "decomp"]
+)
+def test_fetch_inputs_real_newave_and_decomp_parents_ignore_model_version(
+    tmp_path: Path, plugin: ModelPlugin
+) -> None:
+    ws = _ws(tmp_path)
+    store = RecordingObjectStore()
+    store.seed(S3Uri(_INPUTS_BUCKET, "entradas/deck.zip"), b"deck-bytes")
+    store.seed(
+        S3Uri(_OUTPUTS_BUCKET, "artifacts/abc/saidas/metadata.modelops"),
+        _parent_metadata(),
+    )
+    for name in plugin.parent_artifacts:
+        store.seed(
+            S3Uri(_OUTPUTS_BUCKET, f"artifacts/abc/saidas/{name}"),
+            name.encode("utf-8"),
+        )
+
+    state = _fetch_with_parent(ws, plugin, store)
+
+    for name in plugin.parent_artifacts:
+        assert (ws.parent_dir / name).is_file()
+    assert state.parent is not None
+    assert state.parent.model_name == "NEWAVE"
 
 
 @pytest.mark.parametrize("raw_parent_path", ["", "''", '""', "  "])
@@ -512,13 +682,39 @@ def test_read_parent_returns_parent_info_with_starting_date_verbatim() -> None:
         _parent_metadata(),
     )
 
-    info = read_parent(store, ParentPlugin(), _PARENT_URI)
+    info, version = read_parent(store, ParentPlugin(), _PARENT_URI)
 
     assert info == ParentInfo(
         path=_PARENT_URI,
         model_name="NEWAVE",
         starting_date="2025-10-01T00:00:00+00:00",
     )
+    assert version is None
+
+
+@pytest.mark.parametrize(
+    ("model_version", "expected"),
+    [
+        pytest.param("v1.2.3", "v1.2.3", id="string"),
+        pytest.param(_ABSENT, None, id="absent"),
+        pytest.param(None, None, id="json_null"),
+        pytest.param(7, None, id="number"),
+        pytest.param([], None, id="list"),
+        pytest.param({}, None, id="object"),
+    ],
+)
+def test_read_parent_passes_model_version_through_or_none(
+    tmp_path: Path, model_version: object, expected: str | None
+) -> None:
+    ws = _ws(tmp_path)
+    store = RecordingObjectStore()
+    _seed_parent_run(store, _parent_metadata(model_version=model_version))
+    plugin = _CheckParentPlugin(store)
+
+    assert read_parent(store, ParentPlugin(), _PARENT_URI)[1] == expected
+    _fetch_with_parent(ws, plugin, store)
+
+    assert [call[1] for call in plugin.calls] == [expected]
 
 
 # ---------------------------------------------------------------------------

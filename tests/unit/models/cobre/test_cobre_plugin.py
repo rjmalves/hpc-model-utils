@@ -1,5 +1,6 @@
-"""ADR-003/ADR-038/R73/R74/R105 tests for the cobre plugin skeleton
-(ticket-068)."""
+"""ADR-003/ADR-038/ADR-096/ADR-098/ADR-108/R3/R48/R73/R74/R105 tests for
+the cobre plugin skeleton and its parent-run hooks (ticket-068,
+ticket-004)."""
 
 from __future__ import annotations
 
@@ -8,27 +9,41 @@ import logging
 import re
 import zipfile
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from hpc_model_utils.core.errors import DataError, UsageError
-from hpc_model_utils.core.lifecycle.prepare import purge_stale_outputs
+from hpc_model_utils.core.lifecycle.fetch import fetch_inputs
+from hpc_model_utils.core.lifecycle.prepare import (
+    extract_sanitize_inputs,
+    purge_stale_outputs,
+)
 from hpc_model_utils.core.plugin import ExecutableSpec, ParentRun
-from hpc_model_utils.core.state import StudyInfo
+from hpc_model_utils.core.state import ParentInfo, StateStore, StudyInfo
 from hpc_model_utils.core.workspace import Workspace
+from hpc_model_utils.infra.s3 import S3Uri
 from hpc_model_utils.models import cobre
-from hpc_model_utils.models.cobre import CobrePlugin, case, outputs
+from hpc_model_utils.models.cobre import CobrePlugin, case, outputs, policy
 from hpc_model_utils.models.cobre import plugin as cobre_plugin_module
 from tests.support.cobre_case import (
     case_members,
+    cobre_parent_metadata,
     cobre_workspace,
+    policy_members,
+    policy_zip,
     write_elf_stub,
     write_outputs,
 )
+from tests.support.object_store import RecordingObjectStore
+from tests.support.reporter import RecordingReporter
 
 _STUDY = "caso_cobre"
+_START = "2024-01-01T00:00:00+00:00"
+_INPUT_URI = "s3://inputs-bucket/entradas/deck.zip"
+_PARENT_URI = "s3://outputs-bucket/artifacts/parenthash"
 
 
 def _config_members(config: object) -> dict[str, bytes]:
@@ -55,8 +70,8 @@ def test_declarations_match_requirement_two() -> None:
     assert plugin.output_patterns == (r"(?:[^/]+/)?output/.+",)
     assert plugin.output_patterns == case.OUTPUT_PATTERNS
     assert plugin.log_patterns == ()
-    assert plugin.parent_model is None
-    assert plugin.parent_artifacts == ()
+    assert plugin.parent_model == "COBRE"
+    assert plugin.parent_artifacts == ("policy.zip",)
     assert plugin.always_write_parent_path is False
 
 
@@ -88,9 +103,6 @@ def test_declarations_abc_defaults_for_unused_hooks(tmp_path: Path) -> None:
     ws = Workspace.at(tmp_path)
     plugin.prepare(ws, "name")
     plugin.postprocess(ws)
-    parent = ParentRun("s3://b/k", "NEWAVE", "2024-01-01T00:00:00+00:00", ())
-    with pytest.raises(UsageError, match="cobre does not support parent runs"):
-        plugin.fetch_parent(ws, parent)
     with pytest.raises(UsageError, match="offline ingestion"):
         plugin.ingest_offline(ws, ())
 
@@ -616,3 +628,142 @@ def test_static_probe_unreadable_file_raises_data_error_chained(
         CobrePlugin().check_executables(ws)
     assert isinstance(excinfo.value.__cause__, PermissionError)
     _message(excinfo, tmp_path)
+
+
+# -- parent runs --------------------------------------------------------
+
+
+def _parent_workspace(tmp_path: Path) -> tuple[Workspace, StateStore]:
+    ws = cobre_workspace(
+        tmp_path, stale_outputs=("output/policy/cuts/stale.bin",)
+    ).ws
+    store = StateStore(ws)
+    store.save(
+        replace(
+            store.load_or_create("cobre"),
+            parent=ParentInfo(_PARENT_URI, "COBRE", _START),
+        )
+    )
+    policy_zip(ws.parent_dir / "policy.zip", policy_members())
+    return ws, store
+
+
+def test_check_parent_and_fetch_parent_delegate_to_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ws = Workspace.at(tmp_path)
+    info = ParentInfo(_PARENT_URI, "COBRE", _START)
+    archive = ws.parent_dir / "policy.zip"
+    versions: list[tuple[ParentInfo, str | None, str | None]] = []
+    restores: list[tuple[Workspace, Path, str]] = []
+
+    def record_versions(
+        parent: ParentInfo,
+        parent_version: str | None,
+        child_version: str | None,
+    ) -> None:
+        versions.append((parent, parent_version, child_version))
+
+    def record_restore(
+        ws: Workspace, archive: Path, parent_starting_date: str
+    ) -> None:
+        restores.append((ws, archive, parent_starting_date))
+
+    monkeypatch.setattr(policy, "check_versions", record_versions)
+    monkeypatch.setattr(policy, "restore", record_restore)
+
+    plugin = CobrePlugin()
+    plugin.check_parent(ws, info, "v0.19.1", "v0.19.1-fixinflows")
+    plugin.fetch_parent(ws, ParentRun(_PARENT_URI, "COBRE", _START, (archive,)))
+
+    assert versions == [(info, "v0.19.1", "v0.19.1-fixinflows")]
+    assert restores == [(ws, archive, _START)]
+
+
+def test_extract_sanitize_inputs_restores_the_parent_policy_after_the_purge(
+    tmp_path: Path,
+) -> None:
+    ws, store = _parent_workspace(tmp_path)
+
+    state = extract_sanitize_inputs(
+        ws, CobrePlugin(), store, RecordingReporter()
+    )
+
+    output = case.case_root(ws) / "output"
+    restored = {
+        p.relative_to(output).as_posix()
+        for p in (output / "policy").rglob("*")
+        if p.is_file()
+    }
+    assert restored == set(policy_members())
+    assert (output / "policy" / "basis").is_dir()
+    assert not any(
+        name.startswith("caso_cobre/output/") for name in state.input_files
+    )
+
+
+def test_extract_sanitize_inputs_retry_leaves_an_identical_policy_tree(
+    tmp_path: Path,
+) -> None:
+    ws, store = _parent_workspace(tmp_path)
+    policy_dir = case.case_root(ws) / "output" / "policy"
+
+    def snapshot() -> dict[str, tuple[bool, bytes]]:
+        return {
+            p.relative_to(policy_dir).as_posix(): (
+                p.is_dir(),
+                p.read_bytes() if p.is_file() else b"",
+            )
+            for p in policy_dir.rglob("*")
+        }
+
+    extract_sanitize_inputs(ws, CobrePlugin(), store, RecordingReporter())
+    first = snapshot()
+    extract_sanitize_inputs(ws, CobrePlugin(), store, RecordingReporter())
+
+    assert first
+    assert snapshot() == first
+
+
+@pytest.mark.parametrize(
+    ("metadata", "match"),
+    [
+        pytest.param(
+            cobre_parent_metadata(status="CANCELLED"),
+            "parent run status is not SUCCESS",
+            id="cancelled",
+        ),
+        pytest.param(
+            cobre_parent_metadata(status="TIMEOUT"),
+            "parent run status is not SUCCESS",
+            id="timeout",
+        ),
+        pytest.param(
+            cobre_parent_metadata(model_name="NEWAVE"),
+            "parent model_name mismatch",
+            id="non-cobre",
+        ),
+    ],
+)
+def test_fetch_inputs_rejects_cancelled_timeout_and_non_cobre_parents(
+    tmp_path: Path, metadata: bytes, match: str
+) -> None:
+    ws = Workspace.at(tmp_path)
+    store = RecordingObjectStore()
+    store.seed(S3Uri.parse(_INPUT_URI), b"deck-bytes")
+    store.seed(S3Uri.parse(f"{_PARENT_URI}/saidas/metadata.modelops"), metadata)
+    store.seed(S3Uri.parse(f"{_PARENT_URI}/saidas/policy.zip"), b"policy-bytes")
+
+    with pytest.raises(DataError, match=match):
+        fetch_inputs(
+            ws,
+            CobrePlugin(),
+            store,
+            RecordingReporter(),
+            StateStore(ws),
+            _INPUT_URI,
+            parent_path=_PARENT_URI,
+            delete=True,
+        )
+
+    assert not any(uri.endswith("saidas/policy.zip") for _, uri in store.ops)

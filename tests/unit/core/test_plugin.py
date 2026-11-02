@@ -13,7 +13,7 @@ from hpc_model_utils.core.errors import UsageError
 from hpc_model_utils.core.launch import Launcher, LaunchSpec, Resources
 from hpc_model_utils.core.outputs import OutputPlan
 from hpc_model_utils.core.plugin import ExecutableSpec, ModelPlugin, ParentRun
-from hpc_model_utils.core.state import StudyInfo
+from hpc_model_utils.core.state import ParentInfo, StudyInfo
 from hpc_model_utils.core.workspace import Workspace
 from hpc_model_utils.models import get_plugin
 from tests.support.fake_plugin import (
@@ -156,6 +156,17 @@ def test_postprocess_default_is_noop(tmp_path: Path) -> None:
 def test_check_executables_default_is_noop(tmp_path: Path) -> None:
     ws = Workspace(tmp_path)
     _MinimalPlugin().check_executables(ws)
+
+
+def test_check_parent_default_is_noop(tmp_path: Path) -> None:
+    parent = ParentInfo("s3://b/k", "FAKE", "2026-01-01T00:00:00+00:00")
+    before = sorted(tmp_path.iterdir())
+
+    _MinimalPlugin().check_parent(
+        Workspace.at(tmp_path), parent, "v1.0.0", None
+    )
+
+    assert sorted(tmp_path.iterdir()) == before
 
 
 def test_synthesis_args_default_returns_none(tmp_path: Path) -> None:
