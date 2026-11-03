@@ -10,7 +10,7 @@ An external scheduler (ModelOps) drives each execution as a sequence of discrete
 | ------ | ------------------------------------ | ----------------------------------------- | ----- |
 | NEWAVE | NEWAVE deck zip (`caso.dat`, `arquivos.dat`) | `mpiexec` (Hydra)                | Runs the sintetizador step and the `nwlistcf`/`nwlistop` postprocessing. |
 | DECOMP | DECOMP deck zip (`dadger`)           | `mpiexec` (Hydra)                         | Runs the sintetizador step. A chained deck whose `FC NEWCUT` names the wrong NEWAVE stage fails in `preprocess` with `DATA_ERROR` (see [the notice](docs/notices/v2-fc-stage-mismatch.md)). |
-| cobre  | Native cobre case zip, with or without a top-level folder | `novomodelo-mpi` through `srun --mpi=pmix` | `novomodelo-mpi` is the only supported binary (the novomodelo fork's MPI build). `run cobre` requires `--max-cores-per-node`. After a successful run with a simulation phase it builds the novomodelo-bridge dashboard, published as `sintese/dashboard.html`; outside ModelOps, `run cobre` needs `--synthesis-bin <path to novomodelo-bridge>`, or such a run ends `RUNTIME_ERROR` (`core.synthesis_missing`). |
+| cobre  | Native cobre case zip, with or without a top-level folder | `novomodelo-mpi` through `srun --mpi=pmix` | `novomodelo-mpi` is the only supported binary (the novomodelo fork's MPI build). `run cobre` requires `--max-cores-per-node`. After a successful run with a simulation phase it builds the novomodelo-bridge dashboard, published as `sintese/dashboard.html`; outside ModelOps, `run cobre` needs `--synthesis-bin <path to novomodelo-bridge>`, or such a run ends `RUNTIME_ERROR` (`core.synthesis_missing`). With `--parent-path`, a run reuses the policy of a previous SUCCESS cobre run of the same release (`v0.19.1-fixinflows` matches `v0.19.1`): its `policy.zip` is restored into `<case>/output/policy` before launch, and `config.json` `policy.path` must be absent, `./policy` or `policy`. |
 
 cobre is not yet validated on the production cluster.
 
@@ -25,7 +25,7 @@ In workflow order:
 | Command | Purpose | Example |
 | ------- | ------- | ------- |
 | `check_and_fetch_executables` | Download the model binaries from S3 and check them. | `hpc-model-utils check_and_fetch_executables newave s3://<bucket>/<executables-prefix>/` |
-| `check_and_fetch_inputs` | Download the input deck from S3. Options: `--parent-path TEXT` (parent execution for a chained run), `--delete`. | `hpc-model-utils check_and_fetch_inputs decomp s3://<bucket>/<inputs-prefix>/` |
+| `check_and_fetch_inputs` | Download the input deck from S3. Options: `--parent-path TEXT` (parent execution for a chained run: a NEWAVE run for NEWAVE or DECOMP, a cobre run of the same release for cobre), `--delete`. | `hpc-model-utils check_and_fetch_inputs decomp s3://<bucket>/<inputs-prefix>/` |
 | `extract_sanitize_inputs` | Unzip the deck and sanitize its encoding. | `hpc-model-utils extract_sanitize_inputs newave` |
 | `preprocess` | Model-specific deck preparation. Option: `--execution-name TEXT`. | `hpc-model-utils preprocess newave --execution-name <name>` |
 | `run` | Submit the job to SLURM and monitor it until completion. Takes `QUEUE` and `CORES`. Options: `--max-cores-per-node`, `--max-job-time-hours`, `--mpich-path`, `--slurm-path`, `--skip`, `--synthesis-bin`. | `hpc-model-utils run cobre <queue> 128 --max-cores-per-node 32` |
@@ -103,6 +103,8 @@ uv run hpc-model-utils --version
 ```
 
 ## Workflows as code
+
+**Apply freeze until the v2.4.0 pin:** run no `sync --apply`; see [docs/runbooks/cobre-rollout.md](docs/runbooks/cobre-rollout.md).
 
 The ModelOps Task and Workflow definitions live in [deploy/modelops/](deploy/modelops/README.md), with placeholders for every environment-specific value. Apply them with:
 

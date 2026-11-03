@@ -113,9 +113,11 @@ Six methods are abstract, so a plugin that omits one cannot be instantiated:
 | `input_files` | The deck files, unique, deterministic and non-empty |
 | `outputs` | An `OutputPlan` declaring the archives and raw files to publish |
 
-Six methods have defaults and are overridden only when needed: `fetch_parent`,
-`prepare`, `postprocess`, `synthesis_args`, `check_executables` and
-`ingest_offline`. A plugin that supports offline ingestion overrides
+Seven methods have defaults and are overridden only when needed: `fetch_parent`,
+`prepare`, `postprocess`, `synthesis_args`, `check_executables`, `check_parent`
+and `ingest_offline`. `check_parent` runs in `check_and_fetch_inputs` after the
+core parent gates and before any parent artifact download; cobre uses it for
+its release-tag gate (ADR-096). A plugin that supports offline ingestion overrides
 `ingest_offline`; no capability flag exists.
 
 `ModelPlugin.__init_subclass__` validates `name` and `executables` when the
@@ -242,8 +244,8 @@ Each ModelOps task maps to one CLI command in
 | Stage | Command | Step |
 | --- | --- | --- |
 | Fetch executables | `check_and_fetch_executables` | `src/hpc_model_utils/core/lifecycle/fetch.py::fetch_executables` downloads by prefix, then calls the plugin's `check_executables` |
-| Fetch inputs | `check_and_fetch_inputs` | `src/hpc_model_utils/core/lifecycle/fetch.py::fetch_inputs` downloads the deck by exact key and validates the parent run |
-| Extract and sanitize | `extract_sanitize_inputs` | `src/hpc_model_utils/core/lifecycle/prepare.py::extract_sanitize_inputs` extracts the deck, purges stale outputs and re-encodes text |
+| Fetch inputs | `check_and_fetch_inputs` | `src/hpc_model_utils/core/lifecycle/fetch.py::fetch_inputs` downloads the deck by exact key, validates the parent run, then calls the plugin's `check_parent` before downloading the parent artifacts |
+| Extract and sanitize | `extract_sanitize_inputs` | `src/hpc_model_utils/core/lifecycle/prepare.py::extract_sanitize_inputs` extracts the deck, purges stale outputs, re-encodes text and, for a parent run, calls the plugin's `fetch_parent` |
 | Preprocess | `preprocess` | `src/hpc_model_utils/core/lifecycle/prepare.py::preprocess` extracts the parent archive and calls the plugin's `prepare` |
 | Run | `run` | `src/hpc_model_utils/core/lifecycle/run.py::run` submits, follows and ingests |
 | Publish | `result_upload` | `src/hpc_model_utils/core/lifecycle/publish.py::publish` uploads and emits the terminal status |
@@ -523,6 +525,11 @@ to the repository root.
 
 ### cobre runtime facts
 
+- A parent run restores the parent's `policy.zip` into `output/policy` after
+  the deck's own `output/**` is purged, and validates it before anything is
+  written (ADR-100). `output/policy/basis/` always exists afterwards, and a
+  simulation-only child republishes the inherited policy as its own
+  `saidas/policy.zip`.
 - The only cobre binary is `novomodelo-mpi` (the novomodelo fork's MPI
   build), and it runs on every node count. Every offered cobre `modelVersion`
   needs a `novomodelo-mpi` upload in the versions bucket; the upload steps

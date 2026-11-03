@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 2.0.0 is the drop-in v2 engine, with the status-semantics change described in [`docs/notices/v2-status-semantics.md`](docs/notices/v2-status-semantics.md). 2.0.1 and 2.0.2 carry the versioned workflow definitions and the relay fixes that the NEWAVE and DECOMP workflows run. 2.1.0 adds cobre. 2.2.0 tightens the DECOMP FC stage check ([`docs/notices/v2-fc-stage-mismatch.md`](docs/notices/v2-fc-stage-mismatch.md)), cleans the logs and adds a cobre results dashboard. 2.2.1 fixes the reporting of S3 upload and read failures and the cancellation of a terminated run. 2.2.2 fixes the Upload NEWAVE ingest of large offline runs. 2.2.3 supports cobre v0.18.0. 2.3.0 adds job telemetry. 2.3.1 runs the novomodelo fork of cobre. 2.3.2 accepts patched cobre builds, such as `v0.19.1-fixinflows`. 2.3.3 keeps the empty directories of an extracted deck.
 
+## [Unreleased]
+
+### Added
+
+- cobre accepts `--parent-path`: a run can reuse the policy of a previous SUCCESS cobre run. The ModelOps `parentPath` input is now visible in the cobre workflow, which moves to version 2.4.0.
+- `check_and_fetch_inputs` gates a cobre parent on its release tag, ignoring a pre-release suffix (`v0.19.1-fixinflows` matches `v0.19.1`). A parent whose release tag differs, is missing or is not a release tag fails with `DataError`; a run whose own model version is unknown fails with `UsageError`, and the message asks for `check_and_fetch_executables` first.
+- The parent's `policy.zip` is restored into `<case>/output/policy` before launch. The restore checks, before writing anything, that every entry is under `policy/`, that `policy/manifest.bin` and at least one file under `policy/cuts/` exist, that `config.json` `policy.path` is absent, `./policy` or `policy`, and that the parent's start date equals the case's. A failed check is a `DataError`.
+- Developers: `ModelPlugin.check_parent` is a new default method that `fetch_inputs` calls after the core parent gates and before any parent artifact download. It may raise `DataError` or `UsageError` and must not write to the workspace.
+
 ## [2.3.3] - 2026-10-29
 
 ### Fixed
