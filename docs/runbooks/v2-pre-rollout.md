@@ -1,7 +1,5 @@
 # Runbook: v2 pre-rollout validation on the [v2] copies
 
-**Apply freeze until the v2.4.0 pin:** run no `sync --apply`; see [cobre-rollout.md](cobre-rollout.md).
-
 **Status.** The [v2] copies this runbook validated were retired at the
 ticket-067 switch: the original workflows now carry their content, and
 `docs/runbooks/v2-switch.md` is the live procedure. P1-P4 below remain the

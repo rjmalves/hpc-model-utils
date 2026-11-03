@@ -104,8 +104,6 @@ uv run hpc-model-utils --version
 
 ## Workflows as code
 
-**Apply freeze until the v2.4.0 pin:** run no `sync --apply`; see [docs/runbooks/cobre-rollout.md](docs/runbooks/cobre-rollout.md).
-
 The ModelOps Task and Workflow definitions live in [deploy/modelops/](deploy/modelops/README.md), with placeholders for every environment-specific value. Apply them with:
 
 ```bash
