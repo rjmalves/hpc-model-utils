@@ -7,16 +7,6 @@ v0.17.0 rollout. To upload a new version, follow
 
 Note (2026-11-02): from hpc-model-utils v2.4.0, the workflow cobre accepts parentPath; see [Parent-path runs](#parent-path-runs).
 
-**Apply freeze until the v2.4.0 pin.** Run no `sync --apply` from any commit
-between the merge of the cobre parent-path feature PR and the merge of the PR
-that pins the four v2 workflows to `v2.4.0`, nor from the feature branch.
-`apply.py` renders every `workflows/*.json`, publishes every changed workflow
-and refuses a working tree with local edits, so an apply made for any other
-reason still publishes the workflow `cobre` with a visible `parentPath` pinned
-to `v2.3.3`. A parent run of it then fails at fetch-inputs with `USAGE_ERROR`:
-`cobre does not support parent runs`. If a `sync --apply` is started anyway,
-a `PUT workflow cobre` line in its write list means stop: do not type `apply`.
-
 This runbook is the ticket-073 apply (ADR-058, ADR-057, ADR-050, ADR-051,
 ADR-054, R89 as amended 2026-10-05, R105, R131). It runs after the ticket-067c
 sweep. When it ends, the ModelOps catalog holds the workflow `cobre` and its
@@ -877,16 +867,6 @@ ticket that owns the failing part; no definition changes in this section.
   silently.
 
 ## Parent-path runs
-
-**Apply freeze until the v2.4.0 pin.** Run no `sync --apply` from any commit
-between the merge of the cobre parent-path feature PR and the merge of the PR
-that pins the four v2 workflows to `v2.4.0`, nor from the feature branch.
-`apply.py` renders every `workflows/*.json`, publishes every changed workflow
-and refuses a working tree with local edits, so an apply made for any other
-reason still publishes the workflow `cobre` with a visible `parentPath` pinned
-to `v2.3.3`. A parent run of it then fails at fetch-inputs with `USAGE_ERROR`:
-`cobre does not support parent runs`. If a `sync --apply` is started anyway,
-a `PUT workflow cobre` line in its write list means stop: do not type `apply`.
 
 This section is the operator's parent-path child smoke run (R39, R49,
 ADR-103). It proves five facts that only the cluster can confirm with a real

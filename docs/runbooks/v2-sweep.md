@@ -1,7 +1,5 @@
 # Runbook: sweep the shared Tasks onto the v2 set
 
-**Apply freeze until the v2.4.0 pin:** run no `sync --apply`; see [cobre-rollout.md](cobre-rollout.md).
-
 This runbook is the ticket-067c sweep (ADR-044, ADR-050, R89 as amended
 2026-10-05, R102, R131). It runs after the ticket-067 switch. When it ends,
 Ranqueamento Prospectivo and Upload Versão use the v2 `create-workdir` and

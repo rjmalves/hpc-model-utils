@@ -1,7 +1,5 @@
 # Runbook: roll out the final re-pin to v2.2.1
 
-**Apply freeze until the v2.4.0 pin:** run no `sync --apply`; see [cobre-rollout.md](cobre-rollout.md).
-
 This runbook is the ticket-083b apply (ADR-033, ADR-054, R89 as amended
 2026-10-05, R111, R127, R131). It is the last rollout of the v2 plan and runs
 after every earlier rollout has passed. When it ends, `NEWAVE - PEM`,

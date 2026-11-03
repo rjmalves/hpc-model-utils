@@ -108,7 +108,7 @@ PARAMETER_NAMES = {
     ),
 }
 
-UTILS_TAG = "v2.3.3"
+UTILS_TAG = "v2.4.0"
 TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
 SHA = re.compile(r"[0-9a-f]{40}")
 TASK_TOKEN = re.compile(r"@@task:([a-z0-9][a-z0-9-]*)@@")

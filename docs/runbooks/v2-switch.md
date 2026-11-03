@@ -1,7 +1,5 @@
 # Runbook: switch the original workflows to the v2 definitions
 
-**Apply freeze until the v2.4.0 pin:** run no `sync --apply`; see [cobre-rollout.md](cobre-rollout.md).
-
 This runbook is the ticket-067 switch (ADR-047, R133, R67, R68, R89 as amended
 2026-10-05). It runs after the pre-rollout matrix is closed. When it ends, the
 prd originals `NEWAVE - PEM`, `DECOMP - PEM` and `Upload NEWAVE` run `v2.0.2`
