@@ -890,7 +890,7 @@ This section reuses `<artifacts-bucket>` and `<execution-id>` from
 1. **The dry run matches git.** The Preview dry run prints
    `PIN v2.4.0 <utils-v2.4.0-sha12> ok` for the workflow `cobre`, and shows
    `CHANGED` for `cobre` with only the `parentPath` visibility, the `version`
-   and the pin in its diff (rollout check 5).
+   and the pin in its diff (check C5).
 2. **The apply has run.**
 3. **A parent exists:** a SUCCESS cobre execution with training enabled, at a
    `modelVersion` the workflow offers.
