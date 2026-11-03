@@ -13,9 +13,11 @@ exits with a chosen code. The case itself is the synthetic one of
 
 from __future__ import annotations
 
+import io
 import json
 import shlex
 import sys
+import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -26,6 +28,8 @@ import pytest
 from hpc_model_utils.core.diagnosis import RunStatus
 from hpc_model_utils.core.errors import DataError
 from hpc_model_utils.core.launch import Resources, Toolchain
+from hpc_model_utils.core.lifecycle.fetch import fetch_inputs
+from hpc_model_utils.core.lifecycle.prepare import extract_sanitize_inputs
 from hpc_model_utils.core.lifecycle.publish import publish
 from hpc_model_utils.core.lifecycle.run import JobLedger, SubmitRequest, run
 from hpc_model_utils.core.settings import EngineSettings
@@ -38,7 +42,11 @@ from hpc_model_utils.platform.modelops import Reporter
 from tests.support.cli_shim import write_python_sibling
 from tests.support.cobre_case import (
     COBRE_EXECUTION_LINES,
+    case_members,
+    cobre_parent_metadata,
     cobre_workspace,
+    policy_members,
+    policy_zip,
     simulation_metadata,
     training_metadata,
     write_outputs,
@@ -49,6 +57,8 @@ from tests.support.object_store import RecordingObjectStore
 
 _PLUGIN = CobrePlugin()
 _ARTIFACTS_URI = "s3://bucket-a/artifacts/" + "a" * 64 + "/"
+_PARENT_URI = "s3://bucket-p/artifacts/" + "p" * 64
+_INPUT_URI = "s3://bucket-in/entradas/caso_cobre.zip"
 _STATUS_HOOK_METHODS = frozenset(
     {"SetSuccess", "SetModelError", "SetDataError", "SetRuntimeError"}
 )
@@ -72,6 +82,15 @@ record = {
     "FI_PROVIDER": os.environ.get("FI_PROVIDER"),
     "SLURM_NNODES": os.environ.get("SLURM_NNODES"),
 }
+policy_dir = Path(sys.argv[2]) / "output" / "policy"
+record["policy"] = (
+    sorted(
+        f"{path.relative_to(policy_dir)}{'/' if path.is_dir() else ''}"
+        for path in policy_dir.rglob("*")
+    )
+    if policy_dir.is_dir()
+    else None
+)
 with open(CALLS, "a", encoding="utf-8") as handle:
     handle.write(json.dumps(record) + "\n")
 if PAYLOAD.get("execution_lines", True):
@@ -160,11 +179,21 @@ class _Stub:
     stderr: tuple[str, ...] = ()
     world_size: int | None = None
     outputs: bool = True
-    training: Mapping[str, object] = field(default_factory=training_metadata)
+    training: Mapping[str, object] | None = field(
+        default_factory=training_metadata
+    )
     simulation: Mapping[str, object] = field(
         default_factory=simulation_metadata
     )
     dashboard_exit: int = 0
+    policy: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class _Parent:
+    model_version: str = "v0.19.1"
+    child_version: str = "v0.19.1-fixinflows"
+    members: Mapping[str, bytes] = field(default_factory=policy_members)
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,7 +211,10 @@ def _payload(stub: _Stub, scratch: Path) -> dict[str, object]:
     files: dict[str, str] = {}
     if stub.outputs:
         names = write_outputs(
-            scratch, training=stub.training, simulation=stub.simulation
+            scratch,
+            training=stub.training,
+            simulation=stub.simulation,
+            policy=stub.policy,
         )
         files = {
             name: (scratch / "output" / name).read_bytes().hex()
@@ -213,13 +245,49 @@ def _write_stub(ws: Workspace, calls: Path, payload: dict[str, object]) -> None:
     binary.chmod(0o755)
 
 
+def _stage_parent(
+    tmp_path: Path,
+    ws: Workspace,
+    store: RecordingObjectStore,
+    reporter: Reporter,
+    state_store: StateStore,
+    parent: _Parent,
+) -> None:
+    store.seed(S3Uri.parse(_INPUT_URI), ws.eco_deck_path.read_bytes())
+    parent_uri = S3Uri.parse(_PARENT_URI)
+    store.seed(
+        parent_uri.join("saidas", "metadata.modelops"),
+        cobre_parent_metadata(model_version=parent.model_version),
+    )
+    store.seed(
+        parent_uri.join("saidas", "policy.zip"),
+        policy_zip(
+            tmp_path / "parent" / "policy.zip", parent.members
+        ).read_bytes(),
+    )
+    fetch_inputs(
+        ws,
+        _PLUGIN,
+        store,
+        reporter,
+        state_store,
+        _INPUT_URI,
+        parent_path=_PARENT_URI,
+        delete=True,
+    )
+    extract_sanitize_inputs(ws, _PLUGIN, state_store, reporter)
+
+
 def _run_cobre(
     tmp_path: Path,
     fake_slurm: FakeSlurm,
     res: Resources,
     stub: _Stub = _Stub(),
+    *,
+    parent: _Parent | None = None,
+    members: Mapping[str, bytes] | None = None,
 ) -> _Outcome:
-    ws = cobre_workspace(tmp_path).ws
+    ws = cobre_workspace(tmp_path, members=members).ws
     calls = tmp_path / "calls.jsonl"
     bridge_calls = tmp_path / "bridge-calls.jsonl"
     _write_stub(ws, calls, _payload(stub, tmp_path / "scratch"))
@@ -228,11 +296,17 @@ def _run_cobre(
     state_store.save(
         replace(
             state_store.load_or_create(_PLUGIN.name),
-            model=ModelInfo(_PLUGIN.model_name, None),
+            model=ModelInfo(
+                _PLUGIN.model_name,
+                None if parent is None else parent.child_version,
+            ),
         )
     )
     channel = _ListChannel()
     reporter = Reporter(channel, enabled=True)
+    store = RecordingObjectStore()
+    if parent is not None:
+        _stage_parent(tmp_path, ws, store, reporter, state_store, parent)
     tools = Toolchain(
         cli_bin=_write_cli_shim(tmp_path),
         mpich_bin=tmp_path / "mpich" / "bin",
@@ -264,7 +338,6 @@ def _run_cobre(
         settings=settings,
         emit=lambda _line: None,
     )
-    store = RecordingObjectStore()
     publish(ws, _PLUGIN, store, reporter, state_store, _ARTIFACTS_URI)
 
     persisted = state_store.load()
@@ -649,3 +722,88 @@ def test_cobre_scenario_dashboard_failure_keeps_success(
     )
     assert run_json["diagnosis"]["rule_id"] == "cobre.completed"
     assert run_json["diagnosis"]["evidence"][0]["source"] == "synthesis"
+
+
+@pytest.mark.timeout(60)
+def test_cobre_scenario_parent_policy_reaches_a_simulation_only_child(
+    fake_slurm: FakeSlurm, tmp_path: Path
+) -> None:
+    outcome = _run_cobre(
+        tmp_path,
+        fake_slurm,
+        Resources("batch", 4, max_cores_per_node=4),
+        _Stub(training=None, policy=False),
+        parent=_Parent(),
+        members=case_members(training=False),
+    )
+
+    diagnosis = outcome.state.diagnosis
+    assert diagnosis is not None
+    assert diagnosis.status is RunStatus.SUCCESS
+    assert diagnosis.rule_id == "cobre.completed"
+    assert _status_hooks(outcome) == [Hook("SetSuccess", ())]
+
+    assert outcome.calls[0]["policy"] == [
+        "basis/",
+        "basis/000.bin",
+        "cuts/",
+        "cuts/000.bin",
+        "manifest.bin",
+        "states/",
+        "states/000.bin",
+    ]
+    published = outcome.store.get_bytes(
+        S3Uri.parse(_ARTIFACTS_URI).join("saidas/policy.zip")
+    )
+    with zipfile.ZipFile(io.BytesIO(published)) as archive:
+        assert {
+            name: archive.read(name) for name in archive.namelist()
+        } == dict(policy_members())
+
+    run_json = json.loads(
+        outcome.store.get_bytes(
+            S3Uri.parse(_ARTIFACTS_URI).join("saidas/run.json")
+        )
+    )
+    assert run_json["parent"] == {
+        "path": _PARENT_URI,
+        "model_name": "COBRE",
+        "starting_date": "2024-01-01T00:00:00+00:00",
+    }
+    assert ("delete", _INPUT_URI) in outcome.store.ops
+
+
+@pytest.mark.timeout(60)
+def test_cobre_scenario_parent_release_mismatch_fails_before_the_policy_download(
+    tmp_path: Path,
+) -> None:
+    ws = cobre_workspace(tmp_path, members=case_members(training=False)).ws
+    state_store = StateStore(ws)
+    state_store.save(
+        replace(
+            state_store.load_or_create(_PLUGIN.name),
+            model=ModelInfo(_PLUGIN.model_name, "v0.19.1"),
+        )
+    )
+    store = RecordingObjectStore()
+    reporter = Reporter(_ListChannel(), enabled=True)
+
+    with pytest.raises(DataError, match="does not match this run's 'v0.19.1'"):
+        _stage_parent(
+            tmp_path,
+            ws,
+            store,
+            reporter,
+            state_store,
+            _Parent(model_version="v0.19.0", child_version="v0.19.1"),
+        )
+
+    assert not any(
+        detail.endswith("saidas/policy.zip") for _, detail in store.ops
+    )
+    assert not any(kind == "delete" for kind, _ in store.ops)
+    persisted = StateStore(ws).load()
+    assert persisted is not None
+    assert all(
+        step.command != "check_and_fetch_inputs" for step in persisted.steps
+    )

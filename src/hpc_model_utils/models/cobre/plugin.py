@@ -1,5 +1,6 @@
-"""ADR-003/ADR-038/ADR-057/R73/R74/R78/R105: ``CobrePlugin``, the first
-plugin for a new model (ticket-068, reworked by ticket-068a).
+"""ADR-003/ADR-038/ADR-057/ADR-096/ADR-098/R73/R74/R78/R105:
+``CobrePlugin``, the first plugin for a new model (ticket-068, reworked
+by ticket-068a).
 
 The deck concerns (case detection, study info, input files) live in
 ``case`` and the static ``novomodelo-mpi`` check lives here; the comm and
@@ -8,8 +9,11 @@ solver facts are verified in the model job (tickets 069 and 070).
 ``launch``, ``diagnosis`` and ``outputs`` modules (tickets 069/070/071).
 ``synthesis_args`` delegates to ``outputs.dashboard_args``, the
 novomodelo-bridge dashboard (ADR-059, ticket-080c). ``prepare``,
-``postprocess``, ``fetch_parent`` and ``ingest_offline`` keep the ABC
-defaults. The plugin is registered in ``models.PLUGINS`` (ticket-072).
+``postprocess`` and ``ingest_offline`` keep the ABC defaults;
+``check_parent`` and ``fetch_parent`` delegate to ``policy`` (the
+release-tag gate at check_and_fetch_inputs, the restore at
+extract_sanitize_inputs). The plugin is registered in ``models.PLUGINS``
+(ticket-072).
 """
 
 from __future__ import annotations
@@ -23,10 +27,16 @@ from hpc_model_utils.core.diagnosis import JobReport, Verdict
 from hpc_model_utils.core.errors import DataError
 from hpc_model_utils.core.launch import LaunchSpec, Resources
 from hpc_model_utils.core.outputs import OutputPlan
-from hpc_model_utils.core.plugin import ExecutableSpec, ModelPlugin
-from hpc_model_utils.core.state import StudyInfo
+from hpc_model_utils.core.plugin import ExecutableSpec, ModelPlugin, ParentRun
+from hpc_model_utils.core.state import ParentInfo, StudyInfo
 from hpc_model_utils.core.workspace import Workspace
-from hpc_model_utils.models.cobre import case, diagnosis, launch, outputs
+from hpc_model_utils.models.cobre import (
+    case,
+    diagnosis,
+    launch,
+    outputs,
+    policy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +55,8 @@ class CobrePlugin(ModelPlugin):
     sanitize_encoding = False
     output_patterns: ClassVar[tuple[str, ...]] = case.OUTPUT_PATTERNS
     log_patterns = diagnosis.LOG_PATTERNS
-    parent_model = None
-    parent_artifacts: ClassVar[tuple[str, ...]] = ()
+    parent_model = "COBRE"
+    parent_artifacts: ClassVar[tuple[str, ...]] = ("policy.zip",)
     always_write_parent_path = False
 
     def study_info(self, ws: Workspace) -> StudyInfo:
@@ -101,3 +111,16 @@ class CobrePlugin(ModelPlugin):
             "comm and solver are verified in the model job",
             name,
         )
+
+    def check_parent(
+        self,
+        ws: Workspace,
+        parent: ParentInfo,
+        parent_version: str | None,
+        child_version: str | None,
+    ) -> None:
+        policy.check_versions(parent, parent_version, child_version)
+
+    def fetch_parent(self, ws: Workspace, parent: ParentRun) -> None:
+        (archive,) = parent.archives
+        policy.restore(ws, archive, parent.starting_date)

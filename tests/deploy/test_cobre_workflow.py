@@ -119,7 +119,7 @@ SHAPES: dict[str, tuple[str, str, bool, str, str, list[str]]] = {
     "slurmPath": ("String", "@@env:slurmPath@@", False, "", "", []),
     "rootPath": ("String", "@@env:rootPath@@", False, "", "", []),
     "inputFile": ("File", "", True, "", "", []),
-    "parentPath": ("String", "''", False, "", "", []),
+    "parentPath": ("String", "''", True, "", "", []),
     "coreCount": ("Int", "400", True, "", "", []),
     "maxCoresPerNode": ("Int", "100", True, "", "", []),
     "queue": (

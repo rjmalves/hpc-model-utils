@@ -1,4 +1,4 @@
-"""ADR-003/ADR-002/R26/R27/R48/R73/R94: the ModelPlugin contract.
+"""ADR-003/ADR-002/ADR-096/R26/R27/R48/R73/R94: the ModelPlugin contract.
 
 G2 (R3) confines model-specific code to four things: deck handling,
 the launch shape, status rules and output classification. Plugins are
@@ -34,7 +34,7 @@ from hpc_model_utils.core.diagnosis import JobReport, LogPattern, Verdict
 from hpc_model_utils.core.errors import UsageError
 from hpc_model_utils.core.launch import LaunchSpec, Resources
 from hpc_model_utils.core.outputs import OutputPlan
-from hpc_model_utils.core.state import StudyInfo
+from hpc_model_utils.core.state import ParentInfo, StudyInfo
 from hpc_model_utils.core.workspace import Workspace
 
 _NAME_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
@@ -142,6 +142,19 @@ class ModelPlugin(ABC):
         return None
 
     def check_executables(self, ws: Workspace) -> None:
+        return None
+
+    def check_parent(
+        self,
+        ws: Workspace,
+        parent: ParentInfo,
+        parent_version: str | None,
+        child_version: str | None,
+    ) -> None:
+        """``fetch_inputs`` calls this once, after the core parent gates
+        and before any ``parent_artifacts`` download. Reject a bad parent
+        with ``DataError``; raise ``UsageError`` for a command-order
+        problem. It must not write to the workspace (ADR-096)."""
         return None
 
     def ingest_offline(self, ws: Workspace, archives: tuple[Path, ...]) -> None:

@@ -281,6 +281,49 @@ def write_outputs(
     return tuple(sorted(files))
 
 
+def policy_members(
+    *,
+    manifest: bool = True,
+    cuts: int = 1,
+    basis: int = 1,
+    states: int = 1,
+) -> dict[str, bytes]:
+    """The file members of a parent run's ``policy.zip``: members of
+    ``Tree(<prefix>output)``, so ``policy/``-relative and files only."""
+    names = ["policy/manifest.bin"] if manifest else []
+    for kind, count in (("cuts", cuts), ("basis", basis), ("states", states)):
+        names.extend(f"policy/{kind}/{i:03d}.bin" for i in range(count))
+    return {name: b"placeholder " + name.encode() for name in names}
+
+
+def policy_zip(dest: Path, members: Mapping[str, bytes]) -> Path:
+    """Write ``members`` in insertion order; a name ending in ``/`` is a
+    directory entry."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    return dest
+
+
+def cobre_parent_metadata(
+    *,
+    status: str = "SUCCESS",
+    model_name: str = "COBRE",
+    model_version: str = "v0.19.1",
+    study_starting_date: str = "2024-01-01T00:00:00+00:00",
+) -> bytes:
+    """A cobre parent run's ``saidas/metadata.modelops`` body."""
+    return _json_bytes(
+        {
+            "model_name": model_name,
+            "status": status,
+            "model_version": model_version,
+            "study_starting_date": study_starting_date,
+        }
+    )
+
+
 def write_elf_stub(assets: Path, *, name: str = "novomodelo-mpi") -> Path:
     assets.mkdir(parents=True, exist_ok=True)
     path = assets / name

@@ -5,6 +5,18 @@ fork's `novomodelo-mpi`. The `cobre-mpi` steps in this record describe the
 v0.17.0 rollout. To upload a new version, follow
 [Upload a novomodelo version](#upload-a-novomodelo-version).
 
+Note (2026-11-02): from hpc-model-utils v2.4.0, the workflow cobre accepts parentPath; see [Parent-path runs](#parent-path-runs).
+
+**Apply freeze until the v2.4.0 pin.** Run no `sync --apply` from any commit
+between the merge of the cobre parent-path feature PR and the merge of the PR
+that pins the four v2 workflows to `v2.4.0`, nor from the feature branch.
+`apply.py` renders every `workflows/*.json`, publishes every changed workflow
+and refuses a working tree with local edits, so an apply made for any other
+reason still publishes the workflow `cobre` with a visible `parentPath` pinned
+to `v2.3.3`. A parent run of it then fails at fetch-inputs with `USAGE_ERROR`:
+`cobre does not support parent runs`. If a `sync --apply` is started anyway,
+a `PUT workflow cobre` line in its write list means stop: do not type `apply`.
+
 This runbook is the ticket-073 apply (ADR-058, ADR-057, ADR-050, ADR-051,
 ADR-054, R89 as amended 2026-10-05, R105, R131). It runs after the ticket-067c
 sweep. When it ends, the ModelOps catalog holds the workflow `cobre` and its
@@ -863,6 +875,100 @@ ticket that owns the failing part; no definition changes in this section.
 - **`cobre.rank_count_mismatch`** points at the PMIx wiring. That is ADR-057's
   rework trigger: escalate to the operator, and never switch the launcher
   silently.
+
+## Parent-path runs
+
+**Apply freeze until the v2.4.0 pin.** Run no `sync --apply` from any commit
+between the merge of the cobre parent-path feature PR and the merge of the PR
+that pins the four v2 workflows to `v2.4.0`, nor from the feature branch.
+`apply.py` renders every `workflows/*.json`, publishes every changed workflow
+and refuses a working tree with local edits, so an apply made for any other
+reason still publishes the workflow `cobre` with a visible `parentPath` pinned
+to `v2.3.3`. A parent run of it then fails at fetch-inputs with `USAGE_ERROR`:
+`cobre does not support parent runs`. If a `sync --apply` is started anyway,
+a `PUT workflow cobre` line in its write list means stop: do not type `apply`.
+
+This section is the operator's parent-path child smoke run (R39, R49,
+ADR-103). It proves five facts that only the cluster can confirm with a real
+novomodelo. It runs after the pin to `v2.4.0` has merged and the operator
+apply has run.
+
+### Placeholders
+
+This section reuses `<artifacts-bucket>` and `<execution-id>` from
+`## Validation`, and P4 and P7 of `docs/runbooks/v2-pre-rollout.md`.
+
+| Placeholder | Where its value comes from |
+| --- | --- |
+| `<parent-hash>` | the ExecutionHash of the parent execution (P7) |
+| `<child-hash>` | the ExecutionHash of the child execution (P7) |
+| `<utils-v2.4.0-sha12>` | the first 12 characters of the `v2.4.0` release commit, from the pin of the workflow `cobre` |
+| `<top>/` | the case zip's top-level folder plus `/`; the prefix is empty, and `<top>/` is absent from the log line, when the case zip has no top-level folder |
+
+### Preconditions
+
+1. **The dry run matches git.** The Preview dry run prints
+   `PIN v2.4.0 <utils-v2.4.0-sha12> ok` for the workflow `cobre`, and shows
+   `CHANGED` for `cobre` with only the `parentPath` visibility, the `version`
+   and the pin in its diff (rollout check 5).
+2. **The apply has run.**
+3. **A parent exists:** a SUCCESS cobre execution with training enabled, at a
+   `modelVersion` the workflow offers.
+
+### Smoke run
+
+The child uses the same case zip as the parent, with `training.enabled`
+false, `simulation.enabled` true and no `policy` key. Its `parentPath` is
+`s3://<artifacts-bucket>/artifacts/<parent-hash>`, and its `modelVersion` has
+the parent's release tag. Export and read the artifacts as in `## Validation`
+(P4, P7), with `<hash>` = `<child-hash>`.
+
+extract-sanitize prints this line in the child's log when it restores the
+parent policy:
+
+```text
+parent policy restored into <top>/output/policy: manifest.bin, <n> cuts, <n> basis, <n> states
+```
+
+### Pass criteria
+
+Record each item in the private rollout-evidence record, with the `Status:`
+values of `## Validation`.
+
+1. **C1 A simulation-only run writes nothing into `output/policy`.** List the
+   member names and sizes of the child's `saidas/policy.zip` and of the
+   parent's with `unzip -l`, and diff the two listings. They must be equal.
+2. **C2 A full-policy load works without an empty `basis/`.** The child
+   reaches SUCCESS. Record whether the parent's `policy/basis/` held files or
+   was empty.
+3. **C3 The version a patched build stamps into its policy.** Run the child
+   on a patched build against a plain-release parent, or the reverse, and
+   record the version string the build stamps into the policy.
+4. **C4 The novomodelo-bridge dashboard works on simulation-only output.**
+   `saidas/sintese/dashboard.html` exists for the child, and its finalize
+   carries no postprocess-failure annotation.
+5. **C5 The live workflow definition matches git.** Run the Preview dry run
+   of the preconditions: it prints the `PIN` line and the `CHANGED` entry
+   described there.
+
+If a criterion fails:
+
+- **C1** reopens re-upload, which is out of scope (R26).
+- **C2** or **C3** reopens this plan's restore.
+- **C4** is recorded against the dashboard and does not change the run
+  status.
+
+### Negative check
+
+Start a child whose `modelVersion` has a different release tag from the
+parent's. It must fail at fetch-inputs with `DATA_ERROR`, a message containing
+`does not match this run's`, and no model job submitted.
+
+### Evidence
+
+Record evidence only in the private rollout-evidence record, in a
+`## Cobre parent-path` section, with `Status:` values as in `## Validation`.
+Never record it in this file.
 
 ## Upload a novomodelo version
 

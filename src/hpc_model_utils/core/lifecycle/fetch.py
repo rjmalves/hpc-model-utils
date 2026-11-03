@@ -1,7 +1,7 @@
-"""ADR-043/ADR-028/ADR-011/ADR-009/R10/R17/R21/R94/R136: the plugin-
-agnostic fetch lifecycle steps (v1's ``check_and_fetch_executables``
-and ``check_and_fetch_inputs``, ported once instead of twice per
-model, R26: the lifecycle owns S3).
+"""ADR-043/ADR-028/ADR-011/ADR-009/ADR-096/ADR-097/R10/R17/R21/R94/R136:
+the plugin-agnostic fetch lifecycle steps (v1's
+``check_and_fetch_executables`` and ``check_and_fetch_inputs``, ported
+once instead of twice per model, R26: the lifecycle owns S3).
 
 ADR-043 (supersedes ADR-041): every parent artifact -- the gating
 ``metadata.modelops`` and each of ``plugin.parent_artifacts`` -- is
@@ -11,7 +11,9 @@ by exact string compare, and its ``status`` must equal ``"SUCCESS"``
 by exact string compare too, never ``RunStatus.parse`` -- a stray
 trailing space must fail closed rather than coerce to ``UNKNOWN``.
 Every parent rejection is a ``DataError`` (D7, R14): it means the
-``parentPath`` input was bad.
+``parentPath`` input was bad. A plugin's ``check_parent`` may also
+raise ``UsageError`` for the wrong command order, and it runs before
+any parent artifact download (ADR-096).
 
 ``fetch_inputs`` never deletes the input object until every download
 and parent check has succeeded; v1 deleted first and lost the input
@@ -160,10 +162,12 @@ def fetch_executables(
 
 def read_parent(
     store: ObjectStore, plugin: ModelPlugin, parent_uri: str
-) -> ParentInfo:
+) -> tuple[ParentInfo, str | None]:
     """The ADR-043 reader: GET ``<parent_uri>/saidas/metadata.modelops``
     from the parent URI's own bucket and gate on it. ``run.json`` is
-    never read."""
+    never read. The second element is the parent's ``model_version`` when
+    it is a string, else ``None``; it is passed to ``check_parent`` and
+    never persisted (ADR-097)."""
     parent_s3 = S3Uri.parse(parent_uri)
     try:
         raw = store.get_bytes(parent_s3.join("saidas", "metadata.modelops"))
@@ -208,8 +212,15 @@ def read_parent(
             "parent model_name mismatch: expected "
             f"{plugin.parent_model!r}, got {model_name!r} ({parent_uri})"
         )
-    return ParentInfo(
-        path=parent_uri, model_name=model_name, starting_date=starting_date
+    raw_version = parsed.get("model_version")
+    model_version = raw_version if isinstance(raw_version, str) else None
+    return (
+        ParentInfo(
+            path=parent_uri,
+            model_name=model_name,
+            starting_date=starting_date,
+        ),
+        model_version,
     )
 
 
@@ -269,7 +280,13 @@ def fetch_inputs(
     parent_info: ParentInfo | None = None
     if parent_s3 is not None:
         assert parent is not None
-        parent_info = read_parent(store, plugin, parent)
+        parent_info, parent_version = read_parent(store, plugin, parent)
+        plugin.check_parent(
+            ws,
+            parent_info,
+            parent_version,
+            None if state.model is None else state.model.version,
+        )
         for name in plugin.parent_artifacts:
             try:
                 store.download(
